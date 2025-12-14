@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:fitbud/User-App/common/appbar/common_appbar.dart';
 import 'package:fitbud/User-App/features/personalization/screens/chats/widget/full_screen_media.dart';
 import 'package:fitbud/utils/colors.dart';

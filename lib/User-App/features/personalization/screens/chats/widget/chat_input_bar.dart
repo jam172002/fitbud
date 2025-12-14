@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:fitbud/utils/colors.dart';
-import 'dart:io';
 
 class ChatInputBar extends StatelessWidget {
   final TextEditingController controller;

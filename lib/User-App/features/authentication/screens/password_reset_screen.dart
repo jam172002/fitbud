@@ -5,6 +5,7 @@ import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class PasswordResetScreen extends StatefulWidget {
   const PasswordResetScreen({super.key});
@@ -19,6 +20,8 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
 
+  bool _busy = false;
+
   @override
   void dispose() {
     passwordController.dispose();
@@ -26,22 +29,75 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
     super.dispose();
   }
 
-  void _resetPassword() {
-    if (_formKey.currentState!.validate()) {
-      // Show success dialog
+  Future<void> _resetPassword() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+
+    // If user is NOT logged in, we cannot set password here for Firebase email reset flow.
+    if (user == null) {
       Get.dialog(
         SimpleDialogWidget(
-          message: "Successfully created new password",
-          icon: LucideIcons.circle_check,
-          iconColor: Colors.green,
-          buttonText: "Continue",
-          onOk: () {
-            // Navigate to next screen
-            Get.offAll(() => UserLoginScreen());
-          },
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message:
+          "You are not logged in. Please reset your password using the link sent to your email, then login again.",
+          buttonText: "Go to Login",
+          onOk: () => Get.offAll(() => const UserLoginScreen()),
         ),
         barrierDismissible: false,
       );
+      return;
+    }
+
+    setState(() => _busy = true);
+
+    try {
+      await user.updatePassword(passwordController.text);
+
+      Get.dialog(
+        SimpleDialogWidget(
+          message: "Password updated successfully",
+          icon: LucideIcons.circle_check,
+          iconColor: Colors.green,
+          buttonText: "Continue",
+          onOk: () => Get.offAll(() => const UserLoginScreen()),
+        ),
+        barrierDismissible: false,
+      );
+    } on FirebaseAuthException catch (e) {
+      // Common case: requires recent login
+      if (e.code == 'requires-recent-login') {
+        Get.dialog(
+          SimpleDialogWidget(
+            icon: LucideIcons.shield_alert,
+            iconColor: XColors.warning,
+            message:
+            "For security reasons, please login again and then change your password from Settings/Profile.",
+            buttonText: "Go to Login",
+            onOk: () => Get.offAll(() => const UserLoginScreen()),
+          ),
+          barrierDismissible: false,
+        );
+      } else {
+        Get.dialog(
+          SimpleDialogWidget(
+            icon: LucideIcons.shield_alert,
+            iconColor: XColors.warning,
+            message: e.message ?? "Failed to update password. Please try again.",
+          ),
+        );
+      }
+    } catch (e) {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: "Unexpected error: $e",
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -102,11 +158,9 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
                     if (value == null || value.isEmpty) {
                       return "Please enter a password";
                     }
-                    // Strict password: min 8 chars, upper, lower, number, special char
                     final pattern =
                         r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$';
-                    final regex = RegExp(pattern);
-                    if (!regex.hasMatch(value)) {
+                    if (!RegExp(pattern).hasMatch(value)) {
                       return "Password must be at least 8 characters,\ninclude uppercase, lowercase, number & special character";
                     }
                     return null;
@@ -139,7 +193,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _resetPassword,
+                    onPressed: _busy ? null : _resetPassword,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: XColors.primary,
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -147,9 +201,9 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      "Create Password",
-                      style: TextStyle(fontSize: 14, color: Colors.white),
+                    child: Text(
+                      _busy ? "Updating..." : "Create Password",
+                      style: const TextStyle(fontSize: 14, color: Colors.white),
                     ),
                   ),
                 ),

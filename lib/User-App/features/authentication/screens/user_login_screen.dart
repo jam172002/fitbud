@@ -1,4 +1,5 @@
 import 'package:fitbud/User-App/common/widgets/form_field.dart';
+import 'package:fitbud/User-App/common/widgets/simple_dialog.dart';
 import 'package:fitbud/User-App/features/authentication/screens/enter_email_screen.dart';
 import 'package:fitbud/User-App/features/authentication/screens/user_signup_screen.dart';
 import 'package:fitbud/User-App/features/service/screens/navigation/user_navigation.dart';
@@ -6,6 +7,7 @@ import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
+import 'package:fitbud/User-App/features/authentication/controllers/auth_controller.dart';
 
 class UserLoginScreen extends StatefulWidget {
   const UserLoginScreen({super.key});
@@ -20,11 +22,37 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
   final emailPhoneController = TextEditingController();
   final passwordController = TextEditingController();
 
+  // Controller is registered in main.dart
+  final AuthController authC = Get.find<AuthController>();
+
   @override
   void dispose() {
     emailPhoneController.dispose();
     passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final res = await authC.login(
+      emailOrPhone: emailPhoneController.text,
+      password: passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    if (res.ok) {
+      Get.off(() => UserNavigation());
+    } else {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: res.message,
+        ),
+      );
+    }
   }
 
   @override
@@ -36,13 +64,9 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Scrollable content
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -63,7 +87,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                         style: TextStyle(fontSize: 12, color: XColors.bodyText),
                         textAlign: TextAlign.center,
                       ),
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
                       // Email / Phone
                       XFormField(
@@ -77,22 +101,14 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                             return "Please enter email or phone";
                           }
 
-                          // Check if input is a phone number (digits only)
-                          final phoneRegExp = RegExp(
-                            r'^\d{10,15}$',
-                          ); // 10-15 digits
-                          // Check if input is a valid email
-                          final emailRegExp = RegExp(
-                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                          );
+                          final phoneRegExp = RegExp(r'^\d{10,15}$');
+                          final emailRegExp =
+                          RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
 
-                          if (phoneRegExp.hasMatch(value)) {
-                            return null; // valid phone
-                          } else if (emailRegExp.hasMatch(value)) {
-                            return null; // valid email
-                          } else {
-                            return "Enter a valid email or phone number";
-                          }
+                          if (phoneRegExp.hasMatch(value)) return null;
+                          if (emailRegExp.hasMatch(value)) return null;
+
+                          return "Enter a valid email or phone number";
                         },
                         cursorColor: XColors.primary,
                       ),
@@ -117,30 +133,30 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                         cursorColor: XColors.primary,
                       ),
 
-                      SizedBox(height: 22),
+                      const SizedBox(height: 22),
 
-                      // Login Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            if (_formKey.currentState!.validate()) {
-                              Get.to(() => UserNavigation());
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: XColors.primary,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      // Login Button (loading aware)
+                      Obx(() {
+                        final busy = authC.isLoading.value;
+                        return SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: busy ? null : _login,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: XColors.primary,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              busy ? "Logging in..." : "Log In",
+                              style: const TextStyle(fontSize: 14, color: Colors.white),
                             ),
                           ),
-                          child: const Text(
-                            "Log In",
-                            style: TextStyle(fontSize: 14, color: Colors.white),
-                          ),
-                        ),
-                      ),
+                        );
+                      }),
+
                       SizedBox(height: spacing),
 
                       // Forget Password
@@ -150,36 +166,26 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                         children: [
                           Text(
                             'Forget Password?',
-                            style: TextStyle(
-                              color: XColors.bodyText,
-                              fontSize: 13,
-                            ),
+                            style: TextStyle(color: XColors.bodyText, fontSize: 13),
                           ),
                           TextButton(
-                            onPressed: () => Get.to(() => EnterEmailScreen()),
-                            style:
-                                TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  foregroundColor: XColors.primary,
-                                ).copyWith(
-                                  overlayColor: WidgetStateProperty.all(
-                                    Colors.transparent,
-                                  ),
-                                ),
+                            onPressed: () => Get.to(() => const EnterEmailScreen()),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              foregroundColor: XColors.primary,
+                            ).copyWith(
+                              overlayColor: WidgetStateProperty.all(Colors.transparent),
+                            ),
                             child: Text(
                               'Reset it',
-                              style: TextStyle(
-                                color: XColors.primary,
-                                fontSize: 13,
-                              ),
+                              style: TextStyle(color: XColors.primary, fontSize: 13),
                             ),
                           ),
                         ],
                       ),
-                      SizedBox(height: 25),
+                      const SizedBox(height: 25),
                     ],
                   ),
                 ),
@@ -198,18 +204,15 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                     style: TextStyle(color: XColors.bodyText, fontSize: 13),
                   ),
                   TextButton(
-                    onPressed: () => Get.to(() => UserSignupScreen()),
-                    style:
-                        TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          foregroundColor: XColors.primary,
-                        ).copyWith(
-                          overlayColor: WidgetStateProperty.all(
-                            Colors.transparent,
-                          ),
-                        ),
+                    onPressed: () => Get.to(() => const UserSignupScreen()),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      foregroundColor: XColors.primary,
+                    ).copyWith(
+                      overlayColor: WidgetStateProperty.all(Colors.transparent),
+                    ),
                     child: Text(
                       'Signup',
                       style: TextStyle(color: XColors.primary, fontSize: 13),

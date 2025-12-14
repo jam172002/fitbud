@@ -1,5 +1,4 @@
 import 'package:fitbud/Onboarding/screens/onboarding-screen/onboarding.dart';
-import 'package:fitbud/User-App/features/service/screens/navigation/user_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 

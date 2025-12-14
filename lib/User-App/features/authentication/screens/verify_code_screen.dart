@@ -8,7 +8,13 @@ import 'package:pinput/pinput.dart';
 
 class VerifyCodeScreen extends StatefulWidget {
   final bool isGYM;
-  const VerifyCodeScreen({super.key, required this.isGYM});
+  final String email;
+
+  const VerifyCodeScreen({
+    super.key,
+    required this.isGYM,
+    required this.email,
+  });
 
   @override
   State<VerifyCodeScreen> createState() => _VerifyCodeScreenState();
@@ -16,8 +22,15 @@ class VerifyCodeScreen extends StatefulWidget {
 
 class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
   final TextEditingController otpController = TextEditingController();
+  bool _busy = false;
 
-  void _confirmCode() {
+  @override
+  void dispose() {
+    otpController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirmCode() async {
     if (otpController.text.length != 4) {
       Get.dialog(
         SimpleDialogWidget(
@@ -29,9 +42,25 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
       return;
     }
 
-    // Navigate to Reset Password Screen
+    setState(() => _busy = true);
 
-    Get.to(() => const PasswordResetScreen());
+    try {
+      // TODO: When you implement real OTP verification, do it here.
+      // For now it is a mock OTP check.
+      // Example (future): await authC.verifyResetOtp(email: widget.email, otp: otpController.text);
+
+      Get.to(() => const PasswordResetScreen());
+    } catch (e) {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: "Verification failed: $e",
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -91,7 +120,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
                 textAlign: TextAlign.center,
               ),
               Text(
-                'iammsufyan@gmail.com',
+                widget.email,
                 style: TextStyle(fontSize: 12, color: XColors.primary),
                 textAlign: TextAlign.center,
               ),
@@ -116,7 +145,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _confirmCode,
+                  onPressed: _busy ? null : _confirmCode,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: XColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -124,9 +153,9 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    "Confirm",
-                    style: TextStyle(fontSize: 14, color: Colors.white),
+                  child: Text(
+                    _busy ? "Verifying..." : "Confirm",
+                    style: const TextStyle(fontSize: 14, color: Colors.white),
                   ),
                 ),
               ),
