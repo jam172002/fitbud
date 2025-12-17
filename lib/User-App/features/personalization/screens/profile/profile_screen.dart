@@ -3,6 +3,7 @@ import 'package:fitbud/User-App/common/widgets/simple_dialog.dart';
 import 'package:fitbud/User-App/features/personalization/screens/profile/buddy_profile_screen.dart';
 import 'package:fitbud/User-App/features/personalization/screens/profile/transactions_screen.dart';
 import 'package:fitbud/User-App/features/personalization/screens/profile/user_profile_details_screen.dart';
+import 'package:fitbud/User-App/features/personalization/screens/settings/settings_screen.dart';
 import 'package:fitbud/User-App/features/service/controllers/plans_controller.dart';
 import 'package:fitbud/User-App/features/service/screens/home/linked_screens/all_buddy_requests_screen.dart';
 import 'package:fitbud/User-App/features/service/screens/home/linked_screens/all_session_invites_screen.dart';
@@ -195,9 +196,9 @@ class ProfileScreen extends StatelessWidget {
             _ProfileTile(
               icon: LucideIcons.bolt,
               title: 'Settings',
-              subtitle: 'App preferences & security',
+              subtitle: 'View all app settings',
               onTap: () {
-                // Navigate to Settings Screen
+                Get.to(() => SettingsScreen());
               },
             ),
           ],
