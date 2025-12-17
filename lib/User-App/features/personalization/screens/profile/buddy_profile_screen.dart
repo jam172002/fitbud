@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:fitbud/User-App/common/appbar/common_appbar.dart';
 import 'package:fitbud/User-App/common/bottom_sheets/session_invite_sheet.dart';
 import 'package:fitbud/User-App/common/widgets/simple_dialog.dart';
@@ -13,7 +11,6 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 import 'dart:math';
-import 'package:path_provider/path_provider.dart';
 
 class BuddyProfileScreen extends StatelessWidget {
   final BuddyScenario scenario;

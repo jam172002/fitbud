@@ -5,11 +5,14 @@ import 'package:fitbud/User-App/features/authentication/screens/location_selecto
 import 'package:fitbud/User-App/features/authentication/screens/permission_screen.dart';
 import 'package:fitbud/User-App/features/authentication/screens/profile_setup_screens/profile_data_gathering_screen.dart';
 import 'package:fitbud/User-App/features/authentication/screens/user_login_screen.dart';
-import 'package:fitbud/User-App/features/service/screens/navigation/user_navigation.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
+
+import 'package:fitbud/User-App/features/authentication/controllers/auth_controller.dart';
+
+import '../../../../domain/repos/repo_provider.dart';
 
 class UserSignupScreen extends StatefulWidget {
   const UserSignupScreen({super.key});
@@ -32,6 +35,14 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
   String? selectedLocation;
   DateTime? selectedDob;
 
+  AuthController get authC {
+    // Safe fallback if you didn't register bindings in main
+    if (!Get.isRegistered<Repos>()) Get.put(Repos(), permanent: true);
+    return Get.isRegistered<AuthController>()
+        ? Get.find<AuthController>()
+        : Get.put(AuthController(Get.find<Repos>()), permanent: true);
+  }
+
   @override
   void dispose() {
     nameController.dispose();
@@ -42,43 +53,55 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
     super.dispose();
   }
 
-  void _signup() {
-    if (_formKey.currentState!.validate()) {
-      if (selectedDob == null) {
-        Get.dialog(
-          SimpleDialogWidget(
-            icon: LucideIcons.shield_alert,
-            iconColor: XColors.warning,
-            message: "Please select your date of birth",
-          ),
-        );
-        return;
-      }
+  Future<void> _signup() async {
+    if (!_formKey.currentState!.validate()) return;
 
-      if (selectedGender == null) {
-        Get.dialog(
-          SimpleDialogWidget(
-            icon: LucideIcons.shield_alert,
-            iconColor: XColors.warning,
-            message: "Please select your gender",
-          ),
-        );
-        return;
-      }
+    if (selectedDob == null) {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: "Please select your date of birth",
+        ),
+      );
+      return;
+    }
 
-      if (selectedLocation == null) {
-        Get.dialog(
-          SimpleDialogWidget(
-            icon: LucideIcons.shield_alert,
-            iconColor: XColors.warning,
-            message: "Please select your location",
-          ),
-        );
-        return;
-      }
+    if (selectedGender == null) {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: "Please select your gender",
+        ),
+      );
+      return;
+    }
 
-      // Perform signup logic here (API call or local storage)
-      // Navigate or show success as needed
+    if (selectedLocation == null) {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: "Please select your location",
+        ),
+      );
+      return;
+    }
+
+    final res = await authC.signUpWithEmail(
+      name: nameController.text.trim(),
+      email: emailController.text.trim(),
+      phone: phoneController.text.trim(),
+      password: passwordController.text,
+      dob: selectedDob!,
+      gender: selectedGender!,
+      location: selectedLocation!,
+    );
+
+    if (!mounted) return;
+
+    if (res.ok) {
       Get.dialog(
         SimpleDialogWidget(
           message: "Signup successful!",
@@ -86,9 +109,17 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
           iconColor: Colors.green,
           buttonText: "Continue",
           onOk: () {
-            // Navigate to next screen or close dialog
             Get.off(() => ProfileDataGatheringScreen());
           },
+        ),
+        barrierDismissible: false,
+      );
+    } else {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: res.message,
         ),
       );
     }
@@ -107,7 +138,7 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.dark(
+            colorScheme: const ColorScheme.dark(
               primary: XColors.primary,
               onPrimary: XColors.primaryText,
               surface: XColors.secondaryBG,
@@ -121,11 +152,10 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
     );
 
     if (picked != null) {
-      final age =
-          now.year -
+      final age = now.year -
           picked.year -
           ((now.month < picked.month ||
-                  (now.month == picked.month && now.day < picked.day))
+              (now.month == picked.month && now.day < picked.day))
               ? 1
               : 0);
 
@@ -135,7 +165,7 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
             icon: LucideIcons.circle_x,
             iconColor: XColors.danger,
             message:
-                "You are underage. This app is not made for users under 16 years old.",
+            "You are underage. This app is not made for users under 16 years old.",
           ),
         );
         return;
@@ -144,9 +174,35 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
       setState(() {
         selectedDob = picked;
         dobController.text =
-            "${picked.day.toString().padLeft(2, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.year}";
+        "${picked.day.toString().padLeft(2, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.year}";
       });
     }
+  }
+
+  Future<void> _selectLocationFlow() async {
+    // keep your permission screen flow exactly the same
+    Get.to(
+          () => PermissionScreen(
+        title: 'Need Location Access',
+        subtitle: 'Please give us access to your GPS Location',
+        illustration: Image.asset('assets/icons/location.png'),
+        allowButtonText: 'Allow',
+            requestLocationPermission: true,
+            showDenyButton: false,
+        onDeny: () {},
+        onAllow: () async {
+          // navigate to location selector
+          // You can return selected location from LocationSelectorScreen via Get.back(result: 'City')
+          final result = await Get.to<String>(() => const LocationSelectorScreen());
+          if (result != null && result.trim().isNotEmpty) {
+            setState(() => selectedLocation = result.trim());
+          } else {
+            // fallback
+            setState(() => selectedLocation = "Selected location");
+          }
+        },
+      ),
+    );
   }
 
   @override
@@ -283,15 +339,12 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
                             return null;
                           },
                         ),
-
                         SizedBox(height: spacing),
 
                         // Gender
                         GenderDropdown(
                           onChanged: (val) {
-                            setState(() {
-                              selectedGender = val;
-                            });
+                            setState(() => selectedGender = val);
                           },
                         ),
                         SizedBox(height: spacing),
@@ -300,81 +353,59 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton.icon(
-                            onPressed: () {
-                              // Pick location logic
-                              setState(() {
-                                selectedLocation = "Selected location";
-                              });
-
-                              Get.to(
-                                () => PermissionScreen(
-                                  title: 'Need Location Access',
-                                  subtitle:
-                                      'Please give us access to your GPS Location',
-                                  illustration: Image.asset(
-                                    'assets/icons/location.png',
-                                  ),
-                                  allowButtonText: 'Allow',
-                                  showDenyButton: false,
-                                  onDeny: () {},
-                                  onAllow: () {
-                                    Get.to(() => LocationSelectorScreen());
-                                  },
-                                ),
-                              );
-                            },
+                            onPressed: _selectLocationFlow,
                             icon: const Icon(
                               LucideIcons.locate,
                               size: 16,
                               color: XColors.primary,
                             ),
-                            label: const Text(
-                              'Select your location',
-                              style: TextStyle(
+                            label: Text(
+                              selectedLocation == null
+                                  ? 'Select your location'
+                                  : 'Location: $selectedLocation',
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w400,
                                 color: XColors.primary,
                               ),
                             ),
                             style: ButtonStyle(
-                              padding: MaterialStateProperty.all(
-                                EdgeInsets.zero,
-                              ),
+                              padding: MaterialStateProperty.all(EdgeInsets.zero),
                               minimumSize: MaterialStateProperty.all(Size.zero),
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              overlayColor: MaterialStateProperty.all(
-                                Colors.transparent,
-                              ),
+                              overlayColor: MaterialStateProperty.all(Colors.transparent),
                               alignment: Alignment.centerRight,
                             ),
                           ),
                         ),
-                        SizedBox(height: 22),
 
-                        // Signup Button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _signup,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: XColors.primary,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                        const SizedBox(height: 22),
+
+                        // Signup Button (loading aware)
+                        Obx(() {
+                          final busy = authC.isLoading.value;
+                          return SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: busy ? null : _signup,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: XColors.primary,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: Text(
+                                busy ? "Creating..." : "Sign up",
+                                style: const TextStyle(fontSize: 14, color: Colors.white),
                               ),
                             ),
-                            child: const Text(
-                              "Sign up",
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 4),
+                          );
+                        }),
 
-                        // Terms & Social
+                        const SizedBox(height: 4),
+
+                        // Terms
                         Wrap(
                           alignment: WrapAlignment.center,
                           spacing: 4,
@@ -388,18 +419,14 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
                             ),
                             TextButton(
                               onPressed: () {},
-                              style:
-                                  TextButton.styleFrom(
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    foregroundColor: XColors.primary,
-                                  ).copyWith(
-                                    overlayColor: MaterialStateProperty.all(
-                                      Colors.transparent,
-                                    ),
-                                  ),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                foregroundColor: XColors.primary,
+                              ).copyWith(
+                                overlayColor: MaterialStateProperty.all(Colors.transparent),
+                              ),
                               child: Text(
                                 'Terms & Conditions',
                                 style: TextStyle(
@@ -410,7 +437,8 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
                             ),
                           ],
                         ),
-                        SizedBox(height: 25),
+
+                        const SizedBox(height: 25),
                       ],
                     ),
                   ),
@@ -429,18 +457,15 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
                       style: TextStyle(color: XColors.bodyText, fontSize: 12),
                     ),
                     TextButton(
-                      onPressed: () => Get.to(() => UserLoginScreen()),
-                      style:
-                          TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            foregroundColor: XColors.primary,
-                          ).copyWith(
-                            overlayColor: MaterialStateProperty.all(
-                              Colors.transparent,
-                            ),
-                          ),
+                      onPressed: () => Get.to(() => const UserLoginScreen()),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: XColors.primary,
+                      ).copyWith(
+                        overlayColor: MaterialStateProperty.all(Colors.transparent),
+                      ),
                       child: Text(
                         'Login',
                         style: TextStyle(color: XColors.primary, fontSize: 12),

@@ -1,10 +1,12 @@
 import 'package:fitbud/User-App/common/widgets/form_field.dart';
 import 'package:fitbud/User-App/common/widgets/simple_dialog.dart';
-import 'package:fitbud/User-App/features/authentication/screens/verify_code_screen.dart';
+import 'package:fitbud/User-App/features/authentication/screens/user_login_screen.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
+
+import 'package:fitbud/User-App/features/authentication/controllers/auth_controller.dart';
 
 class EnterEmailScreen extends StatefulWidget {
   const EnterEmailScreen({super.key});
@@ -17,27 +19,43 @@ class _EnterEmailScreenState extends State<EnterEmailScreen> {
   final _formKey = GlobalKey<FormState>();
   final emailController = TextEditingController();
 
+  // Since you register AuthController in main.dart, just find it.
+  final AuthController authC = Get.find<AuthController>();
+
   @override
   void dispose() {
     emailController.dispose();
     super.dispose();
   }
 
-  void _sendResetEmail() {
-    if (_formKey.currentState!.validate()) {
-      print("Reset email sent to: ${emailController.text}");
+  Future<void> _sendResetEmail() async {
+    if (!_formKey.currentState!.validate()) return;
 
-      // Show dialog and navigate when pressing OK
+    final email = emailController.text.trim();
+    final res = await authC.sendPasswordResetEmail(email);
+
+    if (!mounted) return;
+
+    if (res.ok) {
       Get.dialog(
         SimpleDialogWidget(
-          message: "Password reset instructions have been sent to your email.",
+          message:
+          "We sent a password reset link to your email.\nPlease open your inbox and reset your password from there.",
           icon: LucideIcons.circle_check,
           iconColor: Colors.green,
-          buttonText: "Continue",
+          buttonText: "Back to Login",
           onOk: () {
-            // Navigate to next screen
-            Get.to(() => VerifyCodeScreen(isGYM: false));
+            Get.offAll(() => const UserLoginScreen());
           },
+        ),
+        barrierDismissible: false,
+      );
+    } else {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: res.message,
         ),
       );
     }
@@ -88,7 +106,6 @@ class _EnterEmailScreenState extends State<EnterEmailScreen> {
                 ),
                 const SizedBox(height: 25),
 
-                // Email Field
                 XFormField(
                   controller: emailController,
                   label: "Email",
@@ -96,12 +113,8 @@ class _EnterEmailScreenState extends State<EnterEmailScreen> {
                   prefixIcon: LucideIcons.mail,
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return "Please enter email";
-                    }
-                    if (!RegExp(
-                      r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$",
-                    ).hasMatch(value)) {
+                    if (value == null || value.isEmpty) return "Please enter email";
+                    if (!RegExp(r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$").hasMatch(value)) {
                       return "Enter a valid email";
                     }
                     return null;
@@ -110,24 +123,26 @@ class _EnterEmailScreenState extends State<EnterEmailScreen> {
                 ),
                 const SizedBox(height: 40),
 
-                // Send Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _sendResetEmail,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: XColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                Obx(() {
+                  final busy = authC.isLoading.value;
+                  return SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: busy ? null : _sendResetEmail,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: XColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        busy ? "Sending..." : "Send",
+                        style: const TextStyle(fontSize: 14, color: Colors.white),
                       ),
                     ),
-                    child: const Text(
-                      "Send",
-                      style: TextStyle(fontSize: 14, color: Colors.white),
-                    ),
-                  ),
-                ),
+                  );
+                }),
               ],
             ),
           ),
