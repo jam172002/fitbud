@@ -22,7 +22,6 @@ class _QRScanScreenState extends State<QRScanScreen> {
         scanned = true;
 
         // Navigate to next screen on success
-        Get.to(() => const GymDetailsScreen());
       } else {
         // Show snackbar on failure
         Get.snackbar(
@@ -114,27 +113,6 @@ class _QRScanScreenState extends State<QRScanScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// Next screen after successful scan
-class GymDetailsScreen extends StatelessWidget {
-  const GymDetailsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gym Details'),
-        backgroundColor: XColors.primary,
-      ),
-      body: const Center(
-        child: Text(
-          'Successfully scanned QR code!',
-          style: TextStyle(fontSize: 18),
         ),
       ),
     );

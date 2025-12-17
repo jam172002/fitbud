@@ -193,6 +193,7 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
                           label: 'User Name',
                           hint: 'Enter your name',
                           cursorColor: XColors.primary,
+
                           prefixIcon: LucideIcons.user,
                           validator: (value) {
                             if (value == null || value.isEmpty) {

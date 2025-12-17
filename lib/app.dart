@@ -14,7 +14,7 @@ class MainApp extends StatelessWidget {
         scaffoldBackgroundColor: Color(0xFF000000),
         fontFamily: 'Outfit',
       ),
-      home: XOnBoarding(),
+      home: UserNavigation(),
     );
   }
 }

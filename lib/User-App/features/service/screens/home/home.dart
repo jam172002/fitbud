@@ -4,18 +4,18 @@ import 'package:fitbud/User-App/common/widgets/section_heading.dart';
 import 'package:fitbud/User-App/common/widgets/simple_dialog.dart';
 import 'package:fitbud/User-App/features/personalization/screens/profile/buddy_profile_screen.dart';
 import 'package:fitbud/User-App/features/service/controllers/location_controller.dart';
-import 'package:fitbud/User-App/features/service/screens/home/linked_screens/all_buddy_requests_screen.dart';
+import 'package:fitbud/User-App/features/service/controllers/plans_controller.dart';
 import 'package:fitbud/User-App/features/service/screens/home/linked_screens/all_session_invites_screen.dart';
 import 'package:fitbud/User-App/features/service/screens/home/linked_screens/buddy_find_swipper.dart';
 import 'package:fitbud/User-App/features/service/screens/home/linked_screens/notifications_screen.dart';
 import 'package:fitbud/User-App/features/service/screens/home/linked_screens/premium_plans_screen.dart';
 import 'package:fitbud/User-App/features/service/screens/home/linked_screens/qr_scan_screen.dart';
 import 'package:fitbud/User-App/features/service/screens/home/linked_screens/specific_catagory_buddies_match_screen.dart';
-import 'package:fitbud/User-App/features/service/screens/home/widgets/buddy_request_card.dart';
 import 'package:fitbud/User-App/features/service/screens/home/widgets/catagory_item_icon.dart';
 import 'package:fitbud/User-App/features/service/screens/home/widgets/home_appbar.dart';
 import 'package:fitbud/User-App/features/service/screens/home/widgets/home_product_banner.dart';
 import 'package:fitbud/User-App/features/service/screens/home/widgets/home_session_invite_card.dart';
+import 'package:fitbud/User-App/features/service/screens/home/widgets/plan_card.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:fitbud/utils/enums.dart';
 import 'package:flutter/material.dart';
@@ -32,6 +32,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final LocationController locationController = Get.find();
+  final PremiumPlanController planController = Get.find(); // ← Use controller
   final PageController _pageController = PageController(initialPage: 1000);
   late Timer _timer;
 
@@ -39,11 +40,48 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isFabVisible = true;
   double _lastOffset = 0;
 
-  bool hasPremium = true;
+  final List<Map<String, dynamic>> plans = [
+    {
+      'title': 'Basic',
+      'description': 'Enjoy app functionalities for 15 days.',
+      'price': 2000,
+      'duration': '15 days',
+      'features': [
+        'Unlimited Matches',
+        'Basic Support',
+        'Access to Free Content',
+      ],
+    },
+    {
+      'title': 'Standard',
+      'description': 'Enjoy app functionalities for 1 month.',
+      'price': 3500,
+      'duration': '30 days',
+      'features': [
+        'Unlimited Matches',
+        'Priority Support',
+        'Access to Premium Content',
+        'Ad-Free Experience',
+      ],
+    },
+    {
+      'title': 'Premium',
+      'description': 'Enjoy app functionalities for 3 months.',
+      'price': 9000,
+      'duration': '90 days',
+      'features': [
+        'Unlimited Matches',
+        '24/7 Support',
+        'Access to Premium Content',
+        'Ad-Free Experience',
+        'Exclusive Offers',
+      ],
+    },
+  ];
 
   /// 🔥 Reusable Function: Stop navigation & show your dialog
   void checkPremiumAndProceed(VoidCallback onAllowed) {
-    if (hasPremium) {
+    if (planController.hasPremium) {
       onAllowed();
     } else {
       Get.dialog(
@@ -104,11 +142,6 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   );
 
-  // To test No sesstion invites and no requests please remove the comment below.
-
-  // final List<Map<String, String>> _sessionInvites = [];
-  // final List<Map<String, String>> _buddyRequests = [];
-
   @override
   void initState() {
     super.initState();
@@ -166,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 locationController.updateLocation(pickedLocation);
               }
             },
-            hasPremium: hasPremium,
+            hasPremium: planController.hasPremium, // ← Controller value
             onScanTap: () {
               Get.to(() => QRScanScreen());
             },
@@ -229,70 +262,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  if (hasPremium == false) SizedBox(height: 16),
-
-                  //? Purchase Card
-                  if (hasPremium == false)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: XColors.secondaryBG,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            //? Card details
-                            Row(
-                              children: [
-                                //? icon
-                                Icon(LucideIcons.info, color: XColors.primary),
-                                SizedBox(width: 8),
-                                //? Text
-                                Expanded(
-                                  child: Text(
-                                    'Purchase our Premium Plans to enjoy full functionality of the app.',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: XColors.bodyText,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 8),
-
-                            //? Button
-                            GestureDetector(
-                              onTap: () {
-                                Get.to(() => PremiumPlanScreen());
-                              },
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 22,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  color: XColors.primary,
-                                ),
-                                child: Text(
-                                  'Our Plans',
-                                  style: TextStyle(
-                                    color: XColors.primaryText,
-                                    fontWeight: .w500,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
                   const SizedBox(height: 16),
 
                   //? Session Invites
@@ -352,66 +321,34 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
 
-                  //? Buddy Requests
-                  XHeading(
-                    title: 'Buddy Requests',
-                    actionText: 'View All',
-                    onActionTap: () {
-                      Get.to(() => AllBuddyRequestsScreen());
-                    },
-                    sidePadding: 16,
-                  ),
-                  const SizedBox(height: 16),
-
-                  _buddyRequests.isEmpty
-                      ? Column(
-                          children: [
-                            Image.asset(
-                              'assets/images/no-requests.png',
-                              width: 180,
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              "No Requests Found",
-                              style: TextStyle(
-                                color: XColors.bodyText,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        )
-                      : ListView.separated(
-                          physics: const NeverScrollableScrollPhysics(),
+                  //? Premium Plans
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: GetBuilder<PremiumPlanController>(
+                      builder: (_) {
+                        return ListView.separated(
                           shrinkWrap: true,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: _buddyRequests.length,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: plans.length,
                           separatorBuilder: (_, __) =>
-                              const SizedBox(height: 22),
+                              const SizedBox(height: 16),
                           itemBuilder: (context, index) {
-                            final request = _buddyRequests[index];
-                            return BuddyRequestCard(
-                              name: request['name']!,
-                              gender: request['gender']!,
-                              age: request['age']!,
-                              interest: request['interest']!,
-                              location: request['location']!,
-                              time: request['time']!,
-                              avatar: request['avatar']!,
-                              status: 'pending',
-                              onAccept: () {},
-                              onReject: () {},
-                              onCardTap: () {
-                                Get.to(
-                                  BuddyProfileScreen(
-                                    scenario: BuddyScenario.requestReceived,
-                                  ),
-                                );
-                              },
+                            final plan = plans[index];
+                            return PlanCard(
+                              index: index,
+                              title: plan['title'],
+                              description: plan['description'],
+                              price: plan['price'],
+                              duration: plan['duration'],
+                              features: List<String>.from(plan['features']),
                             );
                           },
-                        ),
+                        );
+                      },
+                    ),
+                  ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
