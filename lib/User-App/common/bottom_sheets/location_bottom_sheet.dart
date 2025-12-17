@@ -1,3 +1,4 @@
+import 'package:fitbud/User-App/features/authentication/screens/location_selector_screen.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
@@ -57,6 +58,17 @@ Future<String?> showLocationBottomSheet(BuildContext context) {
                     isSelected: selected == "DHA Phase II, Lahore",
                     onTap: () =>
                         setState(() => selected = "DHA Phase II, Lahore"),
+                  ),
+                  const SizedBox(height: 8),
+
+                  GestureDetector(
+                    onTap: () {
+                      Get.to(() => LocationSelectorScreen());
+                    },
+                    child: Text(
+                      'Add Location',
+                      style: TextStyle(color: Colors.blue),
+                    ),
                   ),
 
                   const SizedBox(height: 20),
