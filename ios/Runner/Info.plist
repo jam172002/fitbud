@@ -2,21 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 	<dict>
-        <key>UIStatusBarHidden</key>
-        <false/>
-
-        <!-- Permissions -->
-        <key>NSLocationWhenInUseUsageDescription</key>
-        <string>Fitbud uses your location to help you find nearby gyms and validate gym access.</string>
-        <key>NSCameraUsageDescription</key>
-        <string>Fitbud needs camera access for profile photos, sending media, and scanning gym QR codes.</string>
-        <key>NSMicrophoneUsageDescription</key>
-        <string>Fitbud needs microphone access to record voice messages.</string>
-        <key>NSPhotoLibraryUsageDescription</key>
-        <string>Fitbud needs access to your photo library so you can select and share photos and videos.</string>
-        <key>NSPhotoLibraryAddUsageDescription</key>
-        <string>Fitbud needs permission to save photos and videos to your library.</string>
-
+		<key>UIStatusBarHidden</key>
+		<false/>
+		<!-- Permissions -->
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Fitbud uses your location to help you find nearby gyms and validate gym access.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>Fitbud needs camera access for profile photos, sending media, and scanning gym QR codes.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Fitbud needs microphone access to record voice messages.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Fitbud needs access to your photo library so you can select and share photos and videos.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>Fitbud needs permission to save photos and videos to your library.</string>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
