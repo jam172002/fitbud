@@ -1,6 +1,11 @@
-import '../controllers/onboarding_controller.dart';
-import 'package:fitbud/utils/colors.dart';
+// ----------------------------
+// widgets/onboarding_skip.dart
+// Improvement: await async skip
+// ----------------------------
 import 'package:flutter/material.dart';
+import 'package:fitbud/utils/colors.dart';
+
+import '../controllers/onboarding_controller.dart';
 
 class OnBoardingSkip extends StatelessWidget {
   const OnBoardingSkip({super.key});
