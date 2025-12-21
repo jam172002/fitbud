@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../../common/appbar/common_appbar.dart';
 import '../../../../../common/widgets/gym_name_input_dialog.dart';
 import '../../../../../common/widgets/simple_dialog.dart';
+import '../../../navigation/user_navigation.dart';
 import '../../controllers/auth_controller.dart';
 
 class ProfileDataGatheringScreen extends StatefulWidget {
@@ -83,10 +84,24 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
         return _selectedActivities.length >= 3 && _favouriteActivity != null;
       case 2:
         if (_hasGym == null) return false;
+
         if (_hasGym == true) {
-          return _selectedGym != null && _selectedGym!.trim().isNotEmpty;
+          if (_selectedGym == null) return false;
+
+          final sel = _selectedGym!.trim();
+          if (sel.isEmpty) return false;
+          if (sel == '-- select --') return false;
+
+          if (sel == 'not found in list') {
+            final custom = (_customGymName ?? '').trim();
+            return custom.isNotEmpty;
+          }
+
+          return true;
         }
+
         return true;
+
       case 3:
         return _aboutController.text.trim().isNotEmpty;
       default:
@@ -220,7 +235,6 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
         gymName: gymNameToSave,
         about: _aboutController.text.trim(),
       );
-
       if (!res.ok) {
         await _showSimpleMessage(
           res.message,
@@ -230,7 +244,9 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
         return;
       }
 
-      // success -> go next (your existing navigation)
+// success -> go to home
+      Get.offAll(() => UserNavigation());
+
     } catch (e) {
       await _showSimpleMessage(
         'Failed to complete profile: $e',
@@ -268,11 +284,34 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
                 icon: Icons.fitness_center);
             return;
           }
-          if (_hasGym == true && (_selectedGym == null || _selectedGym!.trim().isEmpty)) {
-            await _showSimpleMessage('Please select your gym or add it via "not found in list".',
-                icon: Icons.location_city);
-            return;
+          if (_hasGym == true) {
+            if (_selectedGym == null) {
+              await _showSimpleMessage(
+                'Please select your gym or add it via "not found in list".',
+                icon: Icons.location_city,
+              );
+              return;
+            }
+
+            final sel = _selectedGym!.trim();
+
+            if (sel.isEmpty || sel == '-- select --') {
+              await _showSimpleMessage(
+                'Please select your gym or add it via "not found in list".',
+                icon: Icons.location_city,
+              );
+              return;
+            }
+
+            if (sel == 'not found in list' && (_customGymName ?? '').trim().isEmpty) {
+              await _showSimpleMessage(
+                'Please enter your gym name.',
+                icon: Icons.location_city,
+              );
+              return;
+            }
           }
+
           return;
         case 3:
           if (_aboutController.text.trim().isEmpty) {
@@ -405,42 +444,77 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
 
           Padding(
             padding: const EdgeInsets.all(20.0),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (_currentPage > 0)
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: XColors.secondaryBG,
-                        side: BorderSide(color: XColors.borderColor),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                Row(
+                  children: [
+                    if (_currentPage > 0)
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: XColors.secondaryBG,
+                            side: BorderSide(color: XColors.borderColor),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: _submitting ? null : _prevPage,
+                          child: Text(
+                            'Back',
+                            style: TextStyle(color: XColors.bodyText),
+                          ),
+                        ),
                       ),
-                      onPressed: _submitting ? null : _prevPage,
-                      child: Text('Back', style: TextStyle(color: XColors.bodyText)),
+                    if (_currentPage > 0) const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: XColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: _submitting ? null : _nextPage,
+                        child: Text(
+                          _submitting
+                              ? "Saving..."
+                              : (_currentPage == totalPages - 1 ? "Finish" : "Next"),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: XColors.primaryText,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                if (_currentPage > 0) const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: XColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: _submitting ? null : _nextPage,
-                    child: Text(
-                      _submitting
-                          ? "Saving..."
-                          : (_currentPage == totalPages - 1 ? "Finish" : "Next"),
-                      style: const TextStyle(fontSize: 14, color: XColors.primaryText),
+                  ],
+                ),
+
+                /// Low-emphasis skip button
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: _submitting
+                      ? null
+                      : () async {
+                    await authC.updateMeFields({'isProfileComplete': false});
+                    Get.offAll(() => UserNavigation());
+
+                  },
+                  child: Text(
+                    'Skip for now',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: XColors.bodyText.withValues(alpha: 0.7),
                     ),
                   ),
                 ),
               ],
             ),
           ),
+
         ],
       ),
     );
