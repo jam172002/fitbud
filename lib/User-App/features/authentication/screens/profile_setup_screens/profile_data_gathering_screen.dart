@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:fitbud/User-App/common/appbar/common_appbar.dart';
 import 'package:fitbud/User-App/common/widgets/gym_name_input_dialog.dart';
 import 'package:fitbud/User-App/common/widgets/simple_dialog.dart';
@@ -12,26 +14,29 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:fitbud/User-App/features/authentication/controllers/auth_controller.dart';
+
 class ProfileDataGatheringScreen extends StatefulWidget {
   const ProfileDataGatheringScreen({super.key});
 
   @override
-  State<ProfileDataGatheringScreen> createState() =>
-      _ProfileDataGatheringScreenState();
+  State<ProfileDataGatheringScreen> createState() => _ProfileDataGatheringScreenState();
 }
 
-class _ProfileDataGatheringScreenState
-    extends State<ProfileDataGatheringScreen> {
+class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   final int totalPages = 4;
+
+  // Controller (registered in main.dart)
+  final AuthController authC = Get.find<AuthController>();
 
   // Page 0: Image
   XFile? _selectedImageFile;
   final ImagePicker _picker = ImagePicker();
 
   // Page 1: Activities
-  final List<String> _allActivities = [
+  final List<String> _allActivities = const [
     'Badminton',
     'Cricket',
     'Football',
@@ -48,19 +53,21 @@ class _ProfileDataGatheringScreenState
   String? _favouriteActivity;
 
   // Page 2: Gym info
-  bool? _hasGym; // null = not selected yet
-  final List<String> _gyms = [
+  bool? _hasGym;
+  final List<String> _gyms = const [
     '-- select --',
     'FitHub Lahore',
     'PowerHouse Gym',
     'City Fitness Club',
     'not found in list',
   ];
-
   String? _selectedGym;
+  String? _customGymName;
 
   // Page 3: About yourself
   final TextEditingController _aboutController = TextEditingController();
+
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -70,9 +77,8 @@ class _ProfileDataGatheringScreenState
   }
 
   // ---------------------
-  // Helpers & Validation
+  // Validation
   // ---------------------
-  String? _customGymName;
   bool _isPageValid(int pageIndex) {
     switch (pageIndex) {
       case 0:
@@ -93,10 +99,10 @@ class _ProfileDataGatheringScreenState
   }
 
   Future<void> _showSimpleMessage(
-    String message, {
-    IconData icon = Icons.info,
-    Color iconColor = XColors.primary,
-  }) async {
+      String message, {
+        IconData icon = Icons.info,
+        Color iconColor = XColors.primary,
+      }) async {
     await Get.dialog(
       SimpleDialogWidget(
         message: message,
@@ -108,6 +114,9 @@ class _ProfileDataGatheringScreenState
     );
   }
 
+  // ---------------------
+  // Image picker
+  // ---------------------
   Future<void> _pickImage() async {
     final chosen = await showModalBottomSheet<String>(
       context: context,
@@ -120,18 +129,12 @@ class _ProfileDataGatheringScreenState
             children: [
               ListTile(
                 leading: Icon(Icons.camera_alt, color: XColors.bodyText),
-                title: Text(
-                  'Take a photo',
-                  style: TextStyle(color: XColors.bodyText),
-                ),
+                title: Text('Take a photo', style: TextStyle(color: XColors.bodyText)),
                 onTap: () => Navigator.of(ctx).pop('camera'),
               ),
               ListTile(
                 leading: Icon(Icons.photo_library, color: XColors.bodyText),
-                title: Text(
-                  'Choose from gallery',
-                  style: TextStyle(color: XColors.bodyText),
-                ),
+                title: Text('Choose from gallery', style: TextStyle(color: XColors.bodyText)),
                 onTap: () => Navigator.of(ctx).pop('gallery'),
               ),
               const SizedBox(height: 8),
@@ -160,11 +163,9 @@ class _ProfileDataGatheringScreenState
       }
 
       if (picked != null) {
-        setState(() {
-          _selectedImageFile = picked;
-        });
+        setState(() => _selectedImageFile = picked);
       }
-    } catch (e) {
+    } catch (_) {
       await _showSimpleMessage(
         'Unable to pick image. Please try again.',
         icon: Icons.error,
@@ -174,9 +175,7 @@ class _ProfileDataGatheringScreenState
   }
 
   void _removeSelectedImage() {
-    setState(() {
-      _selectedImageFile = null;
-    });
+    setState(() => _selectedImageFile = null);
   }
 
   Future<String?> _openGymInputDialog() async {
@@ -187,90 +186,114 @@ class _ProfileDataGatheringScreenState
     return result;
   }
 
+  // ---------------------
+  // Submit to Firebase
+  // ---------------------
+  Future<void> _submitProfileSetup() async {
+    if (_submitting) return;
+
+    // Validate all pages before submit
+    for (int i = 0; i < totalPages; i++) {
+      if (!_isPageValid(i)) {
+        await _showSimpleMessage(
+          'Please complete all steps before finishing.',
+          icon: Icons.info,
+          iconColor: XColors.primary,
+        );
+        return;
+      }
+    }
+
+    if (_selectedImageFile == null) {
+      await _showSimpleMessage('Please select a profile image.', icon: Icons.photo);
+      return;
+    }
+
+    setState(() => _submitting = true);
+
+    try {
+      final gymNameToSave = (_selectedGym == 'not found in list')
+          ? (_customGymName?.trim() ?? '')
+          : (_selectedGym?.trim() ?? '');
+
+      final res = await authC.completeProfileSetup(
+        profileImage: File(_selectedImageFile!.path),
+        activities: _selectedActivities.toList(),
+        favouriteActivity: _favouriteActivity!,
+        hasGym: _hasGym ?? false,
+        gymName: gymNameToSave,
+        about: _aboutController.text.trim(),
+      );
+
+      if (!res.ok) {
+        await _showSimpleMessage(
+          res.message,
+          icon: Icons.error,
+          iconColor: XColors.danger,
+        );
+        return;
+      }
+
+      // success -> go next (your existing navigation)
+    } catch (e) {
+      await _showSimpleMessage(
+        'Failed to complete profile: $e',
+        icon: Icons.error,
+        iconColor: XColors.danger,
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  // ---------------------
+  // Navigation
+  // ---------------------
   Future<void> _nextPage() async {
     if (!_isPageValid(_currentPage)) {
       switch (_currentPage) {
         case 0:
-          await _showSimpleMessage(
-            'Please select an image for your profile.',
-            icon: Icons.photo,
-            iconColor: XColors.primary,
-          );
+          await _showSimpleMessage('Please select an image for your profile.', icon: Icons.photo);
           return;
         case 1:
           if (_selectedActivities.length < 3) {
-            await _showSimpleMessage(
-              'Please select at least 3 activities you are interested in.',
-              icon: Icons.checklist,
-              iconColor: XColors.primary,
-            );
+            await _showSimpleMessage('Please select at least 3 activities you are interested in.',
+                icon: Icons.checklist);
             return;
           }
           if (_favouriteActivity == null) {
-            await _showSimpleMessage(
-              'Please select your favourite activity.',
-              icon: Icons.star,
-              iconColor: XColors.primary,
-            );
+            await _showSimpleMessage('Please select your favourite activity.', icon: Icons.star);
             return;
           }
           return;
         case 2:
           if (_hasGym == null) {
-            await _showSimpleMessage(
-              'Please tell us whether you have joined a gym.',
-              icon: Icons.fitness_center,
-              iconColor: XColors.primary,
-            );
+            await _showSimpleMessage('Please tell us whether you have joined a gym.',
+                icon: Icons.fitness_center);
             return;
           }
-          if (_hasGym == true &&
-              (_selectedGym == null || _selectedGym!.trim().isEmpty)) {
-            await _showSimpleMessage(
-              'Please select your gym or add it via "not found in list".',
-              icon: Icons.location_city,
-              iconColor: XColors.primary,
-            );
+          if (_hasGym == true && (_selectedGym == null || _selectedGym!.trim().isEmpty)) {
+            await _showSimpleMessage('Please select your gym or add it via "not found in list".',
+                icon: Icons.location_city);
             return;
           }
           return;
         case 3:
           if (_aboutController.text.trim().isEmpty) {
-            await _showSimpleMessage(
-              'Please write something about yourself.',
-              icon: Icons.edit,
-              iconColor: XColors.primary,
-            );
+            await _showSimpleMessage('Please write something about yourself.', icon: Icons.edit);
             return;
           }
           return;
       }
     }
 
+    // Finish
     if (_currentPage >= totalPages - 1) {
-      Get.off(
-        () => PermissionScreen(
-          title: 'Stay in the loop!',
-          subtitle:
-              'Turn on notifications to get updates, offers, and\nbooking reminders, right on time.',
-          allowButtonText: 'Allow',
-          illustration: Image.asset('assets/icons/notification.png'),
-          showDenyButton: true,
-          onDeny: () {
-            Get.off(() => UserNavigation());
-          },
-          onAllow: () {
-            Get.off(() => UserNavigation());
-          },
-        ),
-      );
+      await _submitProfileSetup();
       return;
     }
 
-    setState(() {
-      _currentPage += 1;
-    });
-
+    setState(() => _currentPage += 1);
     _pageController.animateToPage(
       _currentPage,
       duration: const Duration(milliseconds: 300),
@@ -280,9 +303,7 @@ class _ProfileDataGatheringScreenState
 
   void _prevPage() {
     if (_currentPage > 0) {
-      setState(() {
-        _currentPage -= 1;
-      });
+      setState(() => _currentPage -= 1);
       _pageController.animateToPage(
         _currentPage,
         duration: const Duration(milliseconds: 300),
@@ -293,8 +314,7 @@ class _ProfileDataGatheringScreenState
 
   @override
   Widget build(BuildContext context) {
-    final allowSwipe = _isPageValid(_currentPage);
-
+    // Allow swipe always (better UX). Validation remains on Next button.
     return Scaffold(
       appBar: XAppBar(title: 'Profile Setup', showBackIcon: false),
       body: Column(
@@ -309,9 +329,7 @@ class _ProfileDataGatheringScreenState
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     height: 6,
                     decoration: BoxDecoration(
-                      color: isActive
-                          ? XColors.primary
-                          : XColors.bodyText.withValues(alpha: 0.5),
+                      color: isActive ? XColors.primary : XColors.bodyText.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
@@ -320,17 +338,12 @@ class _ProfileDataGatheringScreenState
             ),
           ),
           const SizedBox(height: 20),
+
           Expanded(
             child: PageView(
               controller: _pageController,
-              physics: allowSwipe
-                  ? const BouncingScrollPhysics()
-                  : const NeverScrollableScrollPhysics(),
-              onPageChanged: (index) {
-                setState(() {
-                  _currentPage = index;
-                });
-              },
+              physics: const BouncingScrollPhysics(),
+              onPageChanged: (index) => setState(() => _currentPage = index),
               children: [
                 ProfileSetupImageSelectionPage(
                   selectedImageFile: _selectedImageFile,
@@ -341,25 +354,18 @@ class _ProfileDataGatheringScreenState
                   allActivities: _allActivities,
                   selectedActivities: _selectedActivities,
                   favouriteActivity: _favouriteActivity,
-                  onActivitySelected: (act, selected) {
+                  onActivitySelected: (act, remove) {
                     setState(() {
-                      if (selected) {
+                      if (remove) {
                         _selectedActivities.remove(act);
-                        if (_favouriteActivity == act)
-                          _favouriteActivity = null;
+                        if (_favouriteActivity == act) _favouriteActivity = null;
                       } else {
                         _selectedActivities.add(act);
                       }
                     });
                   },
-                  onFavouriteSelected: (val) {
-                    setState(() {
-                      _favouriteActivity = val;
-                    });
-                  },
+                  onFavouriteSelected: (val) => setState(() => _favouriteActivity = val),
                 ),
-
-                // GymPage usage
                 ProfileSetupGymPage(
                   hasGym: _hasGym,
                   selectedGym: _selectedGym,
@@ -379,10 +385,8 @@ class _ProfileDataGatheringScreenState
                       final result = await _openGymInputDialog();
                       if (result != null && result.trim().isNotEmpty) {
                         setState(() {
-                          _selectedGym =
-                              'not found in list'; // must match dropdown item
-                          _customGymName = result
-                              .trim(); // show custom gym below
+                          _selectedGym = 'not found in list';
+                          _customGymName = result.trim();
                         });
                       }
                     } else if (val == '-- select --') {
@@ -398,11 +402,11 @@ class _ProfileDataGatheringScreenState
                     }
                   },
                 ),
-
                 ProfileSetupAboutPage(controller: _aboutController),
               ],
             ),
           ),
+
           Padding(
             padding: const EdgeInsets.all(20.0),
             child: Row(
@@ -414,15 +418,10 @@ class _ProfileDataGatheringScreenState
                         backgroundColor: XColors.secondaryBG,
                         side: BorderSide(color: XColors.borderColor),
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      onPressed: _prevPage,
-                      child: Text(
-                        'Back',
-                        style: TextStyle(color: XColors.bodyText),
-                      ),
+                      onPressed: _submitting ? null : _prevPage,
+                      child: Text('Back', style: TextStyle(color: XColors.bodyText)),
                     ),
                   ),
                 if (_currentPage > 0) const SizedBox(width: 12),
@@ -432,17 +431,14 @@ class _ProfileDataGatheringScreenState
                     style: ElevatedButton.styleFrom(
                       backgroundColor: XColors.primary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    onPressed: _nextPage,
+                    onPressed: _submitting ? null : _nextPage,
                     child: Text(
-                      _currentPage == totalPages - 1 ? "Finish" : "Next",
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: XColors.primaryText,
-                      ),
+                      _submitting
+                          ? "Saving..."
+                          : (_currentPage == totalPages - 1 ? "Finish" : "Next"),
+                      style: const TextStyle(fontSize: 14, color: XColors.primaryText),
                     ),
                   ),
                 ),

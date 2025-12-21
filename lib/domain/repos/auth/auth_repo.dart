@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/models/auth/user_settings.dart';
 import '../firestore_paths.dart';
@@ -71,4 +74,29 @@ class AuthRepo extends RepoBase {
       SetOptions(merge: true),
     );
   }
+
+  /// One-time fetch of current signed-in user's profile
+  Future<AppUser?> getMeOnce() async {
+    final uid = requireUid();
+    final snap = await doc('${FirestorePaths.users}/$uid').get();
+    if (!snap.exists) return null;
+    return AppUser.fromDoc(snap);
+  }
+
+  /// Uploads profile image and returns download URL
+  Future<String> uploadMyProfileImage(File file) async {
+    final uid = requireUid();
+
+    // You can change file name later if you want unique versions.
+    final ref = FirebaseStorage.instance.ref('users/$uid/profile.jpg');
+
+    // Upload (contentType optional)
+    await ref.putFile(
+      file,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+
+    return await ref.getDownloadURL();
+  }
+
 }

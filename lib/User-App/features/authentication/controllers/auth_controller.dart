@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
@@ -50,6 +51,76 @@ class AuthController extends GetxController {
   }
 
   // ---------------------------------------------------------------------------
+  // PROFILE: force refresh once (optional helper)
+  // ---------------------------------------------------------------------------
+  Future<void> loadMe() async {
+    final profile = await _repos.authRepo.getMeOnce();
+    me.value = profile;
+  }
+
+
+  // ---------------------------------------------------------------------------
+  // PROFILE UPDATE (generic)
+  // ---------------------------------------------------------------------------
+  Future<AuthResult> updateMeFields(Map<String, dynamic> fields) async {
+    try {
+      isLoading.value = true;
+      await _repos.authRepo.updateMeFields(fields);
+      await loadMe();
+      return AuthResult.success('Profile updated');
+    } catch (e) {
+      return AuthResult.fail('Failed to update: $e', code: 'profile_update_failed');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // COMPLETE PROFILE SETUP (used by ProfileDataGatheringScreen)
+  // - Upload profile image
+  // - Save activities, favourite, gym, about, photoUrl, isProfileComplete=true
+  // ---------------------------------------------------------------------------
+  Future<AuthResult> completeProfileSetup({
+    required File profileImage,
+    required List<String> activities,
+    required String favouriteActivity,
+    required bool hasGym,
+    required String gymName,
+    required String about,
+  }) async {
+    try {
+      isLoading.value = true;
+
+      // 1) Upload image
+      final photoUrl = await _repos.authRepo.uploadMyProfileImage(profileImage);
+      if (photoUrl == null || photoUrl.trim().isEmpty) {
+        return AuthResult.fail('Image upload failed. Please try again.', code: 'upload_failed');
+      }
+
+      // 2) Save fields
+      final payload = <String, dynamic>{
+        'photoUrl': photoUrl,
+        'activities': activities,
+        'favouriteActivity': favouriteActivity,
+        'hasGym': hasGym,
+        'gymName': gymName,
+        'about': about,
+        'isProfileComplete': true,
+        'updatedAt': DateTime.now(),
+      };
+
+      await _repos.authRepo.updateMeFields(payload);
+      await loadMe();
+
+      return AuthResult.success('Profile setup completed');
+    } catch (e) {
+      return AuthResult.fail('Failed to complete profile: $e', code: 'profile_setup_failed');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // SIGN UP (Email/Password)
   // Creates Auth user + creates Firestore AppUser document.
   // ---------------------------------------------------------------------------
@@ -90,6 +161,14 @@ class AuthController extends GetxController {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         isActive: true,
+        // Optional fields for profile completion:
+        // photoUrl: '',
+        // activities: const [],
+        // favouriteActivity: '',
+        // hasGym: false,
+        // gymName: '',
+        // about: '',
+        // isProfileComplete: false,
       );
 
       await _repos.authRepo.upsertMe(user: user, merge: true);
@@ -106,9 +185,8 @@ class AuthController extends GetxController {
 
   // ---------------------------------------------------------------------------
   // LOGIN (Email/Password)
-  // Your UI accepts email OR phone. For now:
   // - If email -> login with email/password
-  // - If phone -> return a controlled message (OTP phone login can be added later)
+  // - If phone -> return controlled message (OTP phone login later)
   // ---------------------------------------------------------------------------
   Future<AuthResult> login({
     required String emailOrPhone,
@@ -119,11 +197,11 @@ class AuthController extends GetxController {
 
       final input = emailOrPhone.trim();
 
-      final isEmail = RegExp(r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$').hasMatch(input);
+      final isEmail =
+      RegExp(r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$').hasMatch(input);
       final isPhone = RegExp(r'^\+?\d{10,15}$').hasMatch(input);
 
       if (!isEmail && isPhone) {
-        // Your UI shows phone option, but Firebase phone auth requires OTP flow.
         return AuthResult.fail(
           'Phone login is not enabled yet. Please login with email.',
           code: 'phone_not_supported',
@@ -151,8 +229,6 @@ class AuthController extends GetxController {
 
   // ---------------------------------------------------------------------------
   // FORGOT PASSWORD (Firebase email reset)
-  // Your EnterEmailScreen currently navigates to VerifyCodeScreen (mock).
-  // In production, Firebase reset email is enough (no OTP screen needed).
   // ---------------------------------------------------------------------------
   Future<AuthResult> sendPasswordResetEmail(String email) async {
     try {
@@ -175,21 +251,6 @@ class AuthController extends GetxController {
   // ---------------------------------------------------------------------------
   Future<void> logout() async {
     await _repos.authRepo.signOut();
-  }
-
-  // ---------------------------------------------------------------------------
-  // UPDATE PROFILE (for Profile editing screens later)
-  // ---------------------------------------------------------------------------
-  Future<AuthResult> updateProfileFields(Map<String, dynamic> fields) async {
-    try {
-      isLoading.value = true;
-      await _repos.authRepo.updateMeFields(fields);
-      return AuthResult.success('Profile updated');
-    } catch (e) {
-      return AuthResult.fail('Failed to update: $e');
-    } finally {
-      isLoading.value = false;
-    }
   }
 
   // ---------------------------------------------------------------------------
