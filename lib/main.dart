@@ -1,4 +1,5 @@
 import 'package:fitbud/tools/firebase_seed.dart';
+import 'package:fitbud/tools/firebase_seed_users.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -30,6 +31,10 @@ Future<void> main() async {
   Get.put<AuthController>(AuthController(Get.find<Repos>()), permanent: true);
   // 🚨 RUN ONLY ONCE
   //await FirebaseSeed.seedAll();
+
+  // RUN ONCE, then remove
+  //await FirebaseSeedUsers.seedProfilesForExistingUids();
+  await FirebaseSeedUsers.seedAll();
 
   runApp(const MainApp());
 }

@@ -8,6 +8,11 @@ import '../../../common/appbar/common_appbar.dart';
 import '../../../common/bottom_sheets/create_group_sheet.dart';
 import '../../../common/bottom_sheets/show_buddies_sheet.dart';
 import '../../../common/widgets/search_with_filter.dart';
+import '../../../domain/models/auth/app_user.dart';
+import '../../../domain/models/chat/conversation.dart';
+import '../../../domain/models/chat/user_conversation_index.dart';
+import '../../../domain/repos/repo_provider.dart';
+import '../authentication/controllers/auth_controller.dart';
 import 'chat_screen.dart';
 
 class InboxScreen extends StatefulWidget {
@@ -22,56 +27,17 @@ class _InboxScreenState extends State<InboxScreen> {
   bool _isFabVisible = true;
   double _lastOffset = 0;
 
-  final List<Map<String, dynamic>> chats = const [
-    {
-      'name': 'Ali Haider',
-      'profilePic': '',
-      'lastMessage': 'Hey! How are you?',
-      'time': '5 mins ago',
-      'unread': true,
-      'isGroup': false,
-    },
-    {
-      'name': 'Gym Buddies',
-      'profilePic': null,
-      'lastMessage': 'Let\'s meet at 7!',
-      'time': '10 mins ago',
-      'unread': false,
-      'isGroup': true,
-      'lastSenderName': 'Haider',
-    },
-    {
-      'name': 'Iron Gym Chat',
-      'profilePic': 'assets/images/buddy.jpg',
-      'lastMessage': 'See you tomorrow!',
-      'time': '30 mins ago',
-      'unread': true,
-      'isGroup': false,
-    },
-    {
-      'name': 'Lahore Fitness Group',
-      'profilePic': '',
-      'lastMessage': 'Workout session starts now!',
-      'time': '1 hr ago',
-      'unread': false,
-      'isGroup': true,
-      'lastSenderName': 'Ali',
-    },
-    {
-      'name': 'Sara Khan',
-      'profilePic': '',
-      'lastMessage': 'Can you send me the plan?',
-      'time': '2 hrs ago',
-      'unread': true,
-      'isGroup': false,
-    },
-  ];
+  final Repos repos = Get.find<Repos>();
+  final AuthController authC = Get.find<AuthController>();
+
+  // cache other user futures to avoid re-fetch on rebuild
+  final Map<String, Future<AppUser?>> _directOtherUserCache = {};
 
   @override
   void initState() {
     super.initState();
-
     const double sensitivity = 8;
+
     _scrollController.addListener(() {
       final offset = _scrollController.position.pixels;
       final diff = offset - _lastOffset;
@@ -92,39 +58,57 @@ class _InboxScreenState extends State<InboxScreen> {
     super.dispose();
   }
 
+  String _relativeTime(DateTime? dt) {
+    if (dt == null) return '';
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} mins ago';
+    if (diff.inHours < 24) return '${diff.inHours} hrs ago';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  // Deterministic direct id format: direct_a_b
+  String _otherIdFromDirectConversationId(String convId) {
+    final uid = authC.authUser.value?.uid ?? '';
+    if (!convId.startsWith('direct_') || uid.isEmpty) return '';
+    final parts = convId.split('_'); // direct, a, b
+    if (parts.length < 3) return '';
+    final a = parts[1];
+    final b = parts[2];
+    return a == uid ? b : a;
+  }
+
+  Future<AppUser?> _loadOtherUserCached(String conversationId) {
+    return _directOtherUserCache.putIfAbsent(conversationId, () async {
+      final otherId = _otherIdFromDirectConversationId(conversationId);
+      if (otherId.isEmpty) return null;
+      try {
+        return await repos.authRepo.getUser(otherId);
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final sortedChats = List<Map<String, dynamic>>.from(chats)
-      ..sort((a, b) {
-        if ((a['unread'] ?? false) && !(b['unread'] ?? false)) return -1;
-        if (!(a['unread'] ?? false) && (b['unread'] ?? false)) return 1;
-        return 0;
-      });
-
     return Scaffold(
       appBar: XAppBar(
         title: 'Inbox',
         showBackIcon: false,
         actions: [
           PopupMenuButton<String>(
-            icon: Icon(
-              LucideIcons.ellipsis_vertical,
-              color: XColors.primary,
-              size: 18,
-            ),
+            icon: Icon(LucideIcons.ellipsis_vertical, color: XColors.primary, size: 18),
             color: XColors.secondaryBG,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             onSelected: (value) {
-              switch (value) {
-                case 'create_group':
-                  showCreateGroupSheet(context);
-                  break;
-                case 'mark_unread':
-                  // TODO
-                  break;
+              if (value == 'create_group') {
+                showCreateGroupSheet(context);
               }
+              // mark all read can be implemented by iterating index docs and calling markConversationRead()
             },
             itemBuilder: (context) => [
               PopupMenuItem(
@@ -132,14 +116,8 @@ class _InboxScreenState extends State<InboxScreen> {
                 child: Row(
                   children: [
                     Icon(LucideIcons.users, size: 16, color: XColors.primary),
-                    SizedBox(width: 8),
-                    Text(
-                      'Create new group',
-                      style: TextStyle(
-                        color: XColors.primaryText,
-                        fontSize: 13,
-                      ),
-                    ),
+                    const SizedBox(width: 8),
+                    Text('Create new group', style: TextStyle(color: XColors.primaryText, fontSize: 13)),
                   ],
                 ),
               ),
@@ -147,28 +125,17 @@ class _InboxScreenState extends State<InboxScreen> {
                 value: 'mark_unread',
                 child: Row(
                   children: [
-                    Icon(
-                      LucideIcons.mail_open,
-                      size: 16,
-                      color: XColors.primary,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Mark all as read',
-                      style: TextStyle(
-                        color: XColors.primaryText,
-                        fontSize: 13,
-                      ),
-                    ),
+                    Icon(LucideIcons.mail_open, size: 16, color: XColors.primary),
+                    const SizedBox(width: 8),
+                    Text('Mark all as read', style: TextStyle(color: XColors.primaryText, fontSize: 13)),
                   ],
                 ),
               ),
             ],
           ),
-          SizedBox(width: 16),
+          const SizedBox(width: 16),
         ],
       ),
-
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -176,25 +143,84 @@ class _InboxScreenState extends State<InboxScreen> {
             children: [
               const SearchWithFilter(horPadding: 0, showFilter: false),
               const SizedBox(height: 16),
-
               Expanded(
-                child: ListView.separated(
-                  controller: _scrollController,
-                  itemCount: sortedChats.length,
-                  separatorBuilder: (_, __) => SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final chat = sortedChats[index];
-                    return SingleChatCard(
-                      chatName: chat['name'],
-                      profilePic: chat['profilePic'],
-                      lastMessage: chat['lastMessage'],
-                      time: chat['time'],
-                      unread: chat['unread'] ?? false,
-                      isGroup: chat['isGroup'] ?? false,
-                      lastSenderName: chat['lastSenderName'],
-                      onTap: () {
-                        Get.to(
-                          () => ChatScreen(isGroup: chat['isGroup'] ?? false),
+                child: StreamBuilder<List<(UserConversationIndex idx, Conversation? conv)>>(
+                  stream: repos.chatRepo.watchMyInbox(limit: 100),
+                  builder: (context, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final items = snap.data ?? const [];
+                    if (items.isEmpty) {
+                      return Center(
+                        child: Text(
+                          'No conversations yet.',
+                          style: TextStyle(color: XColors.bodyText.withOpacity(0.7), fontSize: 13),
+                        ),
+                      );
+                    }
+
+                    return ListView.separated(
+                      controller: _scrollController,
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final (idx, conv) = items[index];
+                        final type = conv?.type ?? idx.type;
+                        final isGroup = type == ConversationType.group;
+
+                        final time = _relativeTime(idx.lastMessageAt ?? conv?.lastMessageAt);
+                        final lastMsg = (idx.lastMessagePreview.isNotEmpty)
+                            ? idx.lastMessagePreview
+                            : (conv?.lastMessagePreview ?? '');
+
+                        if (isGroup) {
+                          final groupName = (conv?.title ?? idx.title).trim().isEmpty ? 'Group' : (conv?.title ?? idx.title);
+                          return SingleChatCard(
+                            chatName: groupName,
+                            profilePic: null,
+                            lastMessage: lastMsg,
+                            time: time,
+                            unreadCount: idx.unreadCount,
+                            isGroup: true,
+                            lastSenderName: null,
+                            onTap: () {
+                              Get.to(() => ChatScreen(
+                                conversationId: idx.conversationId,
+                                isGroup: true,
+                                groupName: groupName,
+                              ));
+                            },
+                          );
+                        }
+
+                        // Direct: resolve other user by deterministic id
+                        return FutureBuilder<AppUser?>(
+                          future: _loadOtherUserCached(idx.conversationId),
+                          builder: (context, uSnap) {
+                            final u = uSnap.data;
+                            final name = (u?.displayName?.trim().isNotEmpty == true) ? u!.displayName! : 'Chat';
+                            final pic = (u?.photoUrl?.trim().isNotEmpty == true) ? u!.photoUrl! : '';
+
+                            return SingleChatCard(
+                              chatName: name,
+                              profilePic: pic,
+                              lastMessage: lastMsg,
+                              time: time,
+                              unreadCount: idx.unreadCount,
+                              isGroup: false,
+                              lastSenderName: null,
+                              onTap: () {
+                                Get.to(() => ChatScreen(
+                                  conversationId: idx.conversationId,
+                                  isGroup: false,
+                                  directOtherUserId: u?.id ?? _otherIdFromDirectConversationId(idx.conversationId),
+                                  directTitle: name,
+                                ));
+                              },
+                            );
+                          },
                         );
                       },
                     );
@@ -206,21 +232,22 @@ class _InboxScreenState extends State<InboxScreen> {
         ),
       ),
 
-      // ---------- FAB with slide + fade ----------
       floatingActionButton: AnimatedSlide(
-        duration: Duration(milliseconds: 220),
-        offset: _isFabVisible ? Offset.zero : Offset(0, 2),
+        duration: const Duration(milliseconds: 220),
+        offset: _isFabVisible ? Offset.zero : const Offset(0, 2),
         child: AnimatedOpacity(
-          duration: Duration(milliseconds: 200),
+          duration: const Duration(milliseconds: 200),
           opacity: _isFabVisible ? 1 : 0,
           child: FloatingActionButton(
             backgroundColor: XColors.primary.withOpacity(0.75),
             elevation: 0,
-            shape: CircleBorder(),
-            onPressed: () {
-              showBuddiesSheet(context, chats);
+            shape: const CircleBorder(),
+            onPressed: () async {
+              // open real buddies list from friendships
+              final buddies = await repos.buddyRepo.watchMyBuddiesUsers().first;
+              showBuddiesSheet(context, buddies);
             },
-            child: Icon(LucideIcons.message_circle_plus, color: Colors.white),
+            child: const Icon(LucideIcons.message_circle_plus, color: Colors.white),
           ),
         ),
       ),

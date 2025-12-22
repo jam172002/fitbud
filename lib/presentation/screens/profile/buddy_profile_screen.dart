@@ -394,7 +394,7 @@ class _ExistingBuddyDropdown extends StatelessWidget {
   }
 
   void _startChat(BuildContext context) =>
-      Get.to(() => ChatScreen(isGroup: false));
+      Get.to(() => ChatScreen(isGroup: false, conversationId: '',));
   void _removeBuddy(BuildContext context) {
     showDialog(
       context: context,

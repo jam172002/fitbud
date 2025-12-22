@@ -1,15 +1,15 @@
+import 'package:fitbud/domain/models/auth/app_user.dart';
+import 'package:fitbud/domain/repos/repo_provider.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
-import 'package:get/get_navigation/src/extension_navigation.dart';
-import 'package:get/utils.dart';
+import 'package:get/get.dart';
 
 import '../../presentation/screens/chats/chat_screen.dart';
 
-void showBuddiesSheet(
-  BuildContext context,
-  List<Map<String, dynamic>> buddies,
-) {
+void showBuddiesSheet(BuildContext context, List<AppUser> buddies) {
+  final repos = Get.find<Repos>();
+
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -40,7 +40,6 @@ void showBuddiesSheet(
                     ),
                   ),
                 ),
-
                 Text(
                   "My Buddies",
                   style: TextStyle(
@@ -55,20 +54,28 @@ void showBuddiesSheet(
                   child: GridView.builder(
                     controller: controller,
                     padding: const EdgeInsets.only(bottom: 24),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          mainAxisExtent: 120,
-                        ),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      mainAxisExtent: 120,
+                    ),
                     itemCount: buddies.length,
                     itemBuilder: (_, index) {
-                      final user = buddies[index];
+                      final u = buddies[index];
+                      final name = (u.displayName ?? '').trim().isEmpty ? 'Buddy' : (u.displayName ?? '');
+                      final pic = (u.photoUrl ?? '').trim();
+
                       return GestureDetector(
-                        onTap: () {
-                          // TODO: Navigate to chat screen
-                          Get.to(() => ChatScreen());
+                        onTap: () async {
+                          Navigator.pop(context); // close sheet
+                          final convId = await repos.chatRepo.getOrCreateDirectConversation(otherUserId: u.id);
+                          Get.to(() => ChatScreen(
+                            conversationId: convId,
+                            isGroup: false,
+                            directOtherUserId: u.id,
+                            directTitle: name,
+                          ));
                         },
                         child: Column(
                           children: [
@@ -78,28 +85,24 @@ void showBuddiesSheet(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: XColors.primary.withOpacity(0.15),
-                                image:
-                                    user['profilePic'] != null &&
-                                        user['profilePic'].toString().isNotEmpty
+                                image: pic.isNotEmpty
                                     ? DecorationImage(
-                                        fit: BoxFit.cover,
-                                        image: AssetImage(user['profilePic']),
-                                      )
+                                  fit: BoxFit.cover,
+                                  image: NetworkImage(pic),
+                                )
                                     : null,
                               ),
-                              child:
-                                  (user['profilePic'] == null ||
-                                      user['profilePic'].toString().isEmpty)
+                              child: pic.isEmpty
                                   ? Icon(
-                                      LucideIcons.user,
-                                      color: XColors.primary,
-                                      size: 28,
-                                    )
+                                LucideIcons.user,
+                                color: XColors.primary,
+                                size: 28,
+                              )
                                   : null,
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              user['name'],
+                              name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(

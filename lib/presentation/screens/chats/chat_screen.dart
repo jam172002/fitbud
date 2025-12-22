@@ -1,4 +1,6 @@
 import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:fitbud/presentation/screens/chats/widget/add_members_to_group_dialog.dart';
 import 'package:fitbud/presentation/screens/chats/widget/chat_input_bar.dart';
 import 'package:fitbud/presentation/screens/chats/widget/full_screen_media.dart';
@@ -8,29 +10,40 @@ import 'package:fitbud/presentation/screens/chats/widget/received_message_bubble
 import 'package:fitbud/presentation/screens/chats/widget/sent_media_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/sent_message_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/typing_indicator.dart';
-import 'package:fitbud/utils/enums.dart';
+import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
-import 'package:get/get_core/get_core.dart';
-import 'package:get/get_navigation/src/extension_navigation.dart';
+import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:fitbud/utils/colors.dart';
-import 'package:file_picker/file_picker.dart';
 
 import '../../../common/bottom_sheets/session_invite_sheet.dart';
 import '../../../common/widgets/two_buttons_dialog.dart';
+import '../../../domain/models/auth/app_user.dart';
+import '../../../domain/models/chat/conversation_participant.dart';
+import '../../../domain/models/chat/message.dart';
+import '../../../domain/repos/repo_provider.dart';
+import '../authentication/controllers/auth_controller.dart';
 import '../profile/buddy_profile_screen.dart';
+import 'package:fitbud/utils/enums.dart';
 
 class ChatScreen extends StatefulWidget {
+  final String conversationId;
+
+  // UI hints
   final bool isGroup;
   final String groupName;
-  final int groupMembers;
+
+  // optional: for direct header
+  final String directOtherUserId;
+  final String directTitle;
 
   const ChatScreen({
     super.key,
+    required this.conversationId,
     this.isGroup = false,
     this.groupName = 'Gym Buddies',
-    this.groupMembers = 15,
+    this.directOtherUserId = '',
+    this.directTitle = '',
   });
 
   @override
@@ -38,17 +51,180 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
+  final Repos repos = Get.find<Repos>();
+  final AuthController authC = Get.find<AuthController>();
+
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _messageController = TextEditingController();
-  List<Map<String, dynamic>> _messages = [];
-  bool _isTyping = false;
-  late List<Map<String, String>> members;
+
+  bool _isTyping = false; // (keep UI; wire later)
+  bool _sending = false;
+
+  // for media preview only (optional)
+  final List<Map<String, dynamic>> _localMediaMessages = [];
+
   @override
   void initState() {
     super.initState();
+    _markRead();
 
-    // Dummy members
-    members = [
+    // keep your typing indicator demo off by default
+    _isTyping = false;
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _markRead() async {
+    try {
+      await repos.chatRepo.markConversationRead(widget.conversationId);
+    } catch (_) {}
+  }
+
+  String _timeLabel(DateTime? dt) {
+    if (dt == null) return '';
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    return "${hour}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}";
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.minScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  // -------------------- send text --------------------
+  Future<void> _sendTextMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty || _sending) return;
+
+    setState(() => _sending = true);
+    try {
+      await repos.chatRepo.sendMessage(
+        conversationId: widget.conversationId,
+        type: MessageType.text,
+        text: text,
+      );
+
+      _messageController.clear();
+      _scrollToBottom();
+      await _markRead();
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Failed to send: $e",
+        backgroundColor: XColors.danger.withOpacity(.2),
+        colorText: XColors.primaryText,
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  // -------------------- media (UI kept, sending can be added later) --------------------
+  Future<void> _pickMedia() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.media,
+      allowMultiple: false,
+    );
+
+    if (result == null || result.files.single.path == null) return;
+
+    final file = File(result.files.single.path!);
+    final isVideo = file.path.toLowerCase().endsWith('.mp4') ||
+        file.path.toLowerCase().endsWith('.mov');
+
+    // Keep your UI feel: show local bubble immediately (preview).
+    setState(() {
+      _localMediaMessages.add({
+        'file': file,
+        'isVideo': isVideo,
+        'time': _timeLabel(DateTime.now()),
+        'isSent': true,
+      });
+    });
+    _scrollToBottom();
+
+    // Actual upload + send mediaUrl should be wired through MediaRepo.
+    Get.snackbar(
+      "Info",
+      "Media preview added. Upload/sending mediaUrl can be enabled next.",
+      backgroundColor: XColors.primary.withOpacity(.2),
+      colorText: XColors.primaryText,
+    );
+  }
+
+  void _openFullScreen(File file, {required bool isVideo}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FullScreenMedia(
+          path: file.path,
+          isVideo: isVideo,
+          isAsset: false,
+        ),
+      ),
+    );
+  }
+
+  // -------------------- header helpers --------------------
+  Future<AppUser?> _loadDirectOtherUser() async {
+    final otherId = widget.directOtherUserId.trim();
+    if (otherId.isEmpty) return null;
+    try {
+      return await repos.authRepo.getUser(otherId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Stream<List<ConversationParticipant>> _participants$() {
+    return repos.chatRepo.watchParticipants(widget.conversationId);
+  }
+
+  // -------------------- members dialog (group) --------------------
+  Future<void> _openMembersDialog() async {
+    final parts = await _participants$().first;
+    final members = <Map<String, String>>[];
+
+    for (final p in parts) {
+      try {
+        final u = await repos.authRepo.getUser(p.userId);
+        members.add({
+          'name': (u.displayName ?? '').isEmpty ? 'User' : (u.displayName ?? ''),
+          'avatar': (u.photoUrl ?? ''),
+        });
+      } catch (_) {
+        members.add({'name': 'User', 'avatar': ''});
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (_) => MembersDialog(
+        members: members,
+        onGroupMemberTap: () {
+          Get.to(() => BuddyProfileScreen(scenario: BuddyScenario.existingBuddy));
+        },
+      ),
+    );
+  }
+
+  // -------------------- add members (group) --------------------
+  Future<void> _openAddMembersDialog() async {
+    // For now we keep your existing UI dialog.
+    // To make it real: you should pass real buddies list (ids + names + avatar).
+    final allBuddies = [
       {'name': 'Ali', 'avatar': 'assets/images/buddy.jpg'},
       {'name': 'Sufyan', 'avatar': 'assets/images/buddy.jpg'},
       {'name': 'Hassan', 'avatar': 'assets/images/buddy.jpg'},
@@ -56,97 +232,29 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       {'name': 'Zara', 'avatar': 'assets/images/buddy.jpg'},
     ];
 
-    // Add dummy received messages
-    _messages.addAll([
-      {
-        'text': 'Hello! How are you?',
-        'time': _getCurrentTime(),
-        'isSent': false,
-        'senderName': 'Ali',
-        'avatar': 'assets/images/buddy.jpg',
-      },
-      {
-        'text': 'Check out the new project images!',
-        'time': _getCurrentTime(),
-        'isSent': false,
-        'senderName': 'Ali',
-        'avatar': 'assets/images/buddy.jpg',
-      },
-    ]);
-
-    // Simulate other user typing after 2 sec
-    Future.delayed(Duration(seconds: 2), () {
-      setState(() => _isTyping = true);
-      Future.delayed(Duration(seconds: 4), () {
-        setState(() => _isTyping = false);
-      });
-    });
-  }
-
-  Future<void> _pickMedia() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.media,
-      allowMultiple: false,
-    );
-
-    if (result != null && result.files.single.path != null) {
-      File file = File(result.files.single.path!);
-      bool isVideo = file.path.endsWith('.mp4') || file.path.endsWith('.mov');
-
-      setState(() {
-        _messages.add({
-          'file': file,
-          'isVideo': isVideo,
-          'time': _getCurrentTime(),
-          'isSent': true,
-        });
-      });
-      _scrollToBottom();
-    }
-  }
-
-  void _sendTextMessage() {
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
-
-    setState(() {
-      _messages.add({'text': text, 'time': _getCurrentTime(), 'isSent': true});
-    });
-    _messageController.clear();
-    _scrollToBottom();
-  }
-
-  String _getCurrentTime() {
-    final now = DateTime.now();
-    final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
-    return "${hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  void _openFullScreen(File file, {required bool isVideo}) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            FullScreenMedia(path: file.path, isVideo: isVideo, isAsset: false),
+    showDialog(
+      context: context,
+      builder: (_) => AddMembersDialog(
+        allBuddies: allBuddies,
+        existingMembers: const [],
+        onConfirm: (selected) async {
+          // This dialog currently returns name/avatar, not userIds.
+          // Real implementation should return userIds and call:
+          // await repos.chatRepo.addMembers(conversationId: widget.conversationId, userIds: ids);
+          Get.snackbar(
+            "Info",
+            "Hook this dialog to real userIds next, then call chatRepo.addMembers().",
+            backgroundColor: XColors.primary.withOpacity(.2),
+            colorText: XColors.primaryText,
+          );
+        },
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final messagesCount = _messages.length;
+    final uid = authC.authUser.value?.uid ?? '';
 
     return Scaffold(
       backgroundColor: XColors.primaryBG,
@@ -159,68 +267,77 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      BuddyProfileScreen(scenario: BuddyScenario.existingBuddy),
+                  builder: (_) => BuddyProfileScreen(
+                    scenario: BuddyScenario.existingBuddy,
+                  ),
                 ),
               );
             }
           },
           child: Padding(
             padding: const EdgeInsets.only(left: 16),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundImage: AssetImage('assets/images/buddy.jpg'),
+            child: FutureBuilder<AppUser?>(
+              future: widget.isGroup ? Future.value(null) : _loadDirectOtherUser(),
+              builder: (_, snap) {
+                final u = snap.data;
+                final provider = (u?.photoUrl?.trim().isNotEmpty == true)
+                    ? NetworkImage(u!.photoUrl!)
+                    : const AssetImage('assets/images/buddy.jpg') as ImageProvider;
+
+                return CircleAvatar(radius: 18, backgroundImage: provider);
+              },
             ),
           ),
         ),
-
         title: GestureDetector(
           onTap: () {
             if (!widget.isGroup) {
-              Get.to(
-                () => BuddyProfileScreen(scenario: BuddyScenario.existingBuddy),
-              );
+              Get.to(() => BuddyProfileScreen(
+                scenario: BuddyScenario.existingBuddy,
+              ));
             }
           },
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.isGroup ? widget.groupName : "Ali Haider",
-                style: TextStyle(
+                widget.isGroup ? widget.groupName : (widget.directTitle.isEmpty ? "Chat" : widget.directTitle),
+                style: const TextStyle(
                   color: XColors.primaryText,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               if (widget.isGroup)
-                Text(
-                  "${widget.groupMembers} members",
-                  style: TextStyle(color: XColors.secondaryText, fontSize: 12),
+                StreamBuilder<List<ConversationParticipant>>(
+                  stream: _participants$(),
+                  builder: (_, snap) {
+                    final c = (snap.data ?? const []).length;
+                    return Text(
+                      "$c members",
+                      style: const TextStyle(
+                        color: XColors.secondaryText,
+                        fontSize: 12,
+                      ),
+                    );
+                  },
                 ),
             ],
           ),
         ),
-
         actions: [
-          // Add user icon for group chat
           if (widget.isGroup)
             GestureDetector(
               onTap: _openAddMembersDialog,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
                 child: Icon(Iconsax.user_add, color: Colors.blue, size: 22),
               ),
             ),
-
-          // Action dropdown menu
           PopupMenuButton<String>(
-            icon: Icon(
-              LucideIcons.ellipsis_vertical,
-              color: XColors.primaryText,
-            ),
+            icon: const Icon(LucideIcons.ellipsis_vertical, color: XColors.primaryText),
             color: XColors.secondaryBG,
-            onSelected: (value) {
+            onSelected: (value) async {
               switch (value) {
                 case 'session_invite':
                   showModalBottomSheet(
@@ -230,30 +347,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     builder: (_) => SessionInviteSheet(
                       isGroup: widget.isGroup,
                       groupName: widget.groupName,
-                      membersCount: widget.groupMembers,
+                      membersCount: 0,
                     ),
                   );
                   break;
 
                 case 'members':
-                  // Show members dialog
-                  showDialog(
-                    context: context,
-                    builder: (_) => MembersDialog(
-                      members: members,
-                      onGroupMemberTap: () {
-                        Get.to(
-                          () => BuddyProfileScreen(
-                            scenario: BuddyScenario.existingBuddy,
-                          ),
-                        );
-                      },
-                    ),
-                  );
+                  await _openMembersDialog();
                   break;
 
                 case 'leave':
-                  // Show leave group confirmation
                   showDialog(
                     context: context,
                     builder: (_) => XButtonsConfirmationDialog(
@@ -262,90 +365,57 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       iconColor: Colors.red,
                       confirmText: "Leave",
                       cancelText: "Cancel",
-                      onConfirm: () {
-                        // Add your leave group logic here
-                        print("Group left");
+                      onConfirm: () async {
+                        await repos.chatRepo.leaveConversation(widget.conversationId);
                       },
                     ),
                   );
                   break;
 
                 case 'delete_chat':
-                  // Show delete chat confirmation
+                // For now: you can implement delete by soft-deleting or removing participants + messages.
                   showDialog(
                     context: context,
                     builder: (_) => XButtonsConfirmationDialog(
-                      message: "Are you sure you want to delete this chat?",
+                      message: "Delete chat is not implemented yet.",
                       icon: Iconsax.trash,
                       iconColor: Colors.red,
-                      confirmText: "Delete",
+                      confirmText: "Ok",
                       cancelText: "Cancel",
-                      onConfirm: () {
-                        // Add your delete chat logic here
-                        print("Chat deleted");
-                      },
+                      onConfirm: () {},
                     ),
                   );
                   break;
 
                 case 'remove_buddy':
-                  // Show remove buddy confirmation
-                  showDialog(
-                    context: context,
-                    builder: (_) => XButtonsConfirmationDialog(
-                      message: "Are you sure you want to remove this buddy?",
-                      icon: Iconsax.user_remove,
-                      iconColor: Colors.red,
-                      confirmText: "Remove",
-                      cancelText: "Cancel",
-                      onConfirm: () {
-                        // Add your remove buddy logic here
-                        print("Buddy removed");
-                      },
-                    ),
-                  );
+                // TODO: remove buddy logic (not chat repo).
                   break;
               }
             },
-
             itemBuilder: (_) {
               if (widget.isGroup) {
                 return [
                   PopupMenuItem(
                     value: 'session_invite',
                     child: Row(
-                      children: [
-                        Icon(
-                          Iconsax.message_text,
-                          size: 18,
-                          color: XColors.primaryText,
-                        ),
+                      children: const [
+                        Icon(Iconsax.message_text, size: 18, color: XColors.primaryText),
                         SizedBox(width: 8),
-                        Text(
-                          "Session Invite",
-                          style: TextStyle(color: XColors.bodyText),
-                        ),
+                        Text("Session Invite", style: TextStyle(color: XColors.bodyText)),
                       ],
                     ),
                   ),
                   PopupMenuItem(
                     value: 'members',
                     child: Row(
-                      children: [
-                        Icon(
-                          Iconsax.people,
-                          size: 18,
-                          color: XColors.primaryText,
-                        ),
+                      children: const [
+                        Icon(Iconsax.people, size: 18, color: XColors.primaryText),
                         SizedBox(width: 8),
-                        Text(
-                          "Members",
-                          style: TextStyle(color: XColors.bodyText),
-                        ),
+                        Text("Members", style: TextStyle(color: XColors.bodyText)),
                       ],
                     ),
                   ),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'leave',
                     child: Row(
                       children: [
@@ -361,43 +431,30 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   PopupMenuItem(
                     value: 'session_invite',
                     child: Row(
-                      children: [
-                        Icon(
-                          Iconsax.message_text,
-                          size: 18,
-                          color: XColors.primaryText,
-                        ),
+                      children: const [
+                        Icon(Iconsax.message_text, size: 18, color: XColors.primaryText),
                         SizedBox(width: 8),
-                        Text(
-                          "Session Invite",
-                          style: TextStyle(color: XColors.bodyText),
-                        ),
+                        Text("Session Invite", style: TextStyle(color: XColors.bodyText)),
                       ],
                     ),
                   ),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'delete_chat',
                     child: Row(
                       children: [
                         Icon(Iconsax.trash, size: 18, color: Colors.red),
                         SizedBox(width: 8),
-                        Text(
-                          "Delete Chat",
-                          style: TextStyle(color: Colors.red),
-                        ),
+                        Text("Delete Chat", style: TextStyle(color: Colors.red)),
                       ],
                     ),
                   ),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'remove_buddy',
                     child: Row(
                       children: [
                         Icon(Iconsax.user_remove, size: 18, color: Colors.red),
                         SizedBox(width: 8),
-                        Text(
-                          "Remove Buddy",
-                          style: TextStyle(color: Colors.red),
-                        ),
+                        Text("Remove Buddy", style: TextStyle(color: Colors.red)),
                       ],
                     ),
                   ),
@@ -405,85 +462,122 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               }
             },
           ),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
         ],
       ),
 
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: messagesCount + (_isTyping ? 1 : 0) + 1,
-              itemBuilder: (_, index) {
-                // Date separator
-                if (index == 0) return _dateSeparator("Today");
+            child: StreamBuilder<List<Message>>(
+              stream: repos.chatRepo.watchMessages(widget.conversationId, limit: 200),
+              builder: (context, snap) {
+                final msgs = snap.data ?? const <Message>[];
 
-                // Typing indicator
-                if (_isTyping && index == messagesCount + 1) {
-                  return TypingIndicator(avatar: 'assets/images/buddy.jpg');
+                // mark read on updates (safe)
+                if (snap.hasData) {
+                  _markRead();
                 }
 
-                // Message index
-                final msg = _messages[index - 1];
-                final prevMsg = index > 1 ? _messages[index - 2] : null;
+                // Reverse list: your repo returns DESC (newest first).
+                // Your UI expects chronological; we can keep descending but scroll accordingly.
+                // Your existing UI uses "maxScrollExtent" approach; here we use reverse list view.
+                final combined = <dynamic>[
+                  ..._localMediaMessages,
+                  ...msgs,
+                ];
 
-                final sameSenderAsPrevious =
-                    prevMsg != null &&
-                    prevMsg.containsKey('isSent') &&
-                    prevMsg['isSent'] == msg['isSent'] &&
-                    ((msg.containsKey('text') && prevMsg.containsKey('text')) ||
-                        (msg.containsKey('file') &&
-                            prevMsg.containsKey('file')));
-
-                EdgeInsets msgMargin = sameSenderAsPrevious
-                    ? EdgeInsets.symmetric(vertical: 4)
-                    : EdgeInsets.symmetric(vertical: 12);
-
-                if (msg.containsKey('file')) {
-                  return Container(
-                    margin: msgMargin,
-                    child: msg['isSent'] == true
-                        ? SentMedia(
-                            file: msg['file'],
-                            isVideo: msg['isVideo'],
-                            time: msg['time'],
-                            onTap: () => _openFullScreen(
-                              msg['file'],
-                              isVideo: msg['isVideo'],
-                            ),
-                          )
-                        : ReceivedMedia(
-                            file: msg['file'],
-                            isVideo: msg['isVideo'],
-                            time: msg['time'],
-                            senderName: msg['senderName'],
-                            avatar: msg['avatar'],
-                            showSender: widget.isGroup,
-                            onTap: () => _openFullScreen(
-                              msg['file'],
-                              isVideo: msg['isVideo'],
-                            ),
-                          ),
-                  );
-                } else {
-                  return Container(
-                    margin: msgMargin,
-                    child: msg['isSent'] == true
-                        ? SentMessage(message: msg['text'], time: msg['time'])
-                        : ReceivedMessage(
-                            message: msg['text'],
-                            time: msg['time'],
-                            senderName: msg['senderName'],
-                            avatar: msg['avatar'],
-                            isGroup: widget.isGroup,
-                          ),
+                if (combined.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No messages yet.',
+                      style: TextStyle(
+                        color: XColors.bodyText.withOpacity(.7),
+                        fontSize: 13,
+                      ),
+                    ),
                   );
                 }
+
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  reverse: true,
+                  itemCount: combined.length + (_isTyping ? 1 : 0) + 1,
+                  itemBuilder: (_, index) {
+                    if (index == combined.length + (_isTyping ? 1 : 0)) {
+                      return const SizedBox(height: 8);
+                    }
+
+                    if (index == combined.length + 1 && _isTyping) {
+                      return const TypingIndicator(avatar: 'assets/images/buddy.jpg');
+                    }
+
+                    // Date separator placeholder (keep your UI)
+                    if (index == combined.length + (_isTyping ? 1 : 0)) {
+                      return _dateSeparator("Today");
+                    }
+
+                    final item = combined[index];
+
+                    // Local media preview bubble
+                    if (item is Map<String, dynamic> && item.containsKey('file')) {
+                      final file = item['file'] as File;
+                      final isVideo = item['isVideo'] as bool;
+                      final time = item['time'] as String;
+
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        child: SentMedia(
+                          file: file,
+                          isVideo: isVideo,
+                          time: time,
+                          onTap: () => _openFullScreen(file, isVideo: isVideo),
+                        ),
+                      );
+                    }
+
+                    // Firestore message bubble
+                    final m = item as Message;
+                    final isSent = m.senderUserId == uid;
+                    final time = _timeLabel(m.createdAt);
+
+                    // Only text supported here; you can expand for image/video by checking m.type + mediaUrl
+                    if (m.type != MessageType.text) {
+                      // Keep your UI: show as text fallback (preview)
+                      final fallback = m.text.isNotEmpty ? m.text : 'Message';
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        child: isSent
+                            ? SentMessage(message: fallback, time: time)
+                            : ReceivedMessage(
+                          message: fallback,
+                          time: time,
+                          senderName: 'User',
+                          avatar: 'assets/images/buddy.jpg',
+                          isGroup: widget.isGroup,
+                        ),
+                      );
+                    }
+
+                    return Container(
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      child: isSent
+                          ? SentMessage(message: m.text, time: time)
+                          : ReceivedMessage(
+                        message: m.text,
+                        time: time,
+                        senderName: 'User',
+                        avatar: 'assets/images/buddy.jpg',
+                        isGroup: widget.isGroup,
+                      ),
+                    );
+                  },
+                );
               },
             ),
           ),
+
           ChatInputBar(
             controller: _messageController,
             onSend: _sendTextMessage,
@@ -495,34 +589,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   Widget _dateSeparator(String text) => Center(
-    child: Text(
-      text,
-      style: TextStyle(color: XColors.primaryText, fontSize: 12),
-    ),
+    child: Text(text, style: const TextStyle(color: XColors.primaryText, fontSize: 12)),
   );
-
-  void _openAddMembersDialog() {
-    final allBuddies = [
-      {'name': 'Ali', 'avatar': 'assets/images/buddy.jpg'},
-      {'name': 'Sufyan', 'avatar': 'assets/images/buddy.jpg'},
-      {'name': 'Hassan', 'avatar': 'assets/images/buddy.jpg'},
-      {'name': 'Ayesha', 'avatar': 'assets/images/buddy.jpg'},
-      {'name': 'Zara', 'avatar': 'assets/images/buddy.jpg'},
-      {'name': 'John Doe', 'avatar': ''},
-      {'name': 'Fatima', 'avatar': ''},
-    ];
-
-    showDialog(
-      context: context,
-      builder: (_) => AddMembersDialog(
-        allBuddies: allBuddies,
-        existingMembers: members,
-        onConfirm: (selected) {
-          setState(() {
-            members.addAll(selected);
-          });
-        },
-      ),
-    );
-  }
 }

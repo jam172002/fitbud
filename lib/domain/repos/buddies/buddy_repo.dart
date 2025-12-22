@@ -4,6 +4,7 @@ import '../../../domain/models/buddies/buddy_request.dart';
 import '../../../domain/models/buddies/friendship.dart';
 import '../../../domain/models/chat/conversation.dart';
 import '../../../domain/models/chat/conversation_participant.dart';
+import '../../models/auth/app_user.dart';
 import '../firestore_paths.dart';
 import '../firestore_repo_base.dart';
 import '../repo_exceptions.dart';
@@ -200,20 +201,47 @@ class BuddyRepo extends RepoBase {
   Stream<List<Friendship>> watchMyFriendships() {
     final uid = _uid();
     return col(FirestorePaths.friendships)
-        .where('userAId', isEqualTo: uid)
-        .snapshots()
-        .map((q) => q.docs.map(Friendship.fromDoc).toList());
-    // Note: to include userBId==uid, either:
-    // (A) store a mirror index collection, or
-    // (B) store an array field "userIds": [a,b] then query arrayContains.
-  }
-
-  /// Preferred for Firebase: store `userIds: [a,b]` and query with arrayContains.
-  Stream<List<Friendship>> watchMyFriendshipsArrayContains() {
-    final uid = _uid();
-    return col(FirestorePaths.friendships)
         .where('userIds', arrayContains: uid)
         .snapshots()
         .map((q) => q.docs.map(Friendship.fromDoc).toList());
+  }
+
+  /// Stream list of actual buddies users (AppUser)
+  Stream<List<AppUser>> watchMyBuddiesUsers({int limit = 200}) {
+    final uid = _uid();
+    return watchMyFriendships().asyncMap((items) async {
+      final otherIds = <String>{};
+
+      for (final f in items) {
+        if (f.isBlocked) continue;
+        if (f.userAId == uid) {
+          otherIds.add(f.userBId);
+        } else if (f.userBId == uid) {
+          otherIds.add(f.userAId);
+        } else {
+          // Defensive: if old docs had unsorted ids
+          otherIds.add(f.userAId);
+          otherIds.add(f.userBId);
+          otherIds.remove(uid);
+        }
+      }
+
+      final ids = otherIds.toList();
+      if (ids.isEmpty) return <AppUser>[];
+
+      // Firestore whereIn max 10 -> chunk
+      final out = <AppUser>[];
+      for (var i = 0; i < ids.length; i += 10) {
+        final chunk = ids.sublist(i, (i + 10).clamp(0, ids.length));
+        // You already have repos.authRepo.getUser(id), but that is one-by-one.
+        // If you have a users collection, batch fetch is better:
+        final snap = await db.collection(FirestorePaths.users).where(FieldPath.documentId, whereIn: chunk).get();
+        out.addAll(snap.docs.map((d) => AppUser.fromDoc(d)));
+      }
+
+      // Sort by display name for UI
+      out.sort((a, b) => (a.displayName ?? '').compareTo(b.displayName ?? ''));
+      return out;
+    });
   }
 }

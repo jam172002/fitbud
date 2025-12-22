@@ -33,4 +33,7 @@ class FirestorePaths {
   // Session subcollections
   static String sessionInvites(String sessionId) => '$sessions/$sessionId/invites';
   static String sessionParticipants(String sessionId) => '$sessions/$sessionId/participants';
+
+  static String userConversations(String uid) =>
+      '$users/$uid/conversations';
 }

@@ -4,13 +4,13 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 
 class SingleChatCard extends StatelessWidget {
   final String chatName;
-  final String? profilePic;
+  final String? profilePic; // can be URL or asset
   final String time;
   final String lastMessage;
   final VoidCallback onTap;
 
   final bool isGroup;
-  final bool unread;
+  final int unreadCount;
   final String? lastSenderName;
 
   const SingleChatCard({
@@ -20,77 +20,94 @@ class SingleChatCard extends StatelessWidget {
     required this.lastMessage,
     this.profilePic,
     this.isGroup = false,
-    this.unread = false,
+    this.unreadCount = 0,
     this.lastSenderName,
     required this.onTap,
   });
 
   bool get hasValidImage =>
-      profilePic != null && profilePic!.isNotEmpty && profilePic != "null";
+      profilePic != null && profilePic!.trim().isNotEmpty && profilePic != "null";
+
+  ImageProvider? _provider() {
+    if (!hasValidImage) return null;
+    final p = profilePic!.trim();
+    final isUrl = p.startsWith('http://') || p.startsWith('https://');
+    return isUrl ? NetworkImage(p) : AssetImage(p);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    final unread = unreadCount > 0;
+
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.only(bottom: 12),
         child: Row(
           children: [
-            /// ------ PROFILE IMAGE WITH FALLBACK ICON ------
             CircleAvatar(
               radius: 30,
               backgroundColor: XColors.secondaryBG,
-              backgroundImage: hasValidImage ? AssetImage(profilePic!) : null,
-              child: !hasValidImage
+              backgroundImage: _provider(),
+              child: _provider() == null
                   ? Icon(
-                      isGroup
-                          ? LucideIcons
-                                .users // group icon
-                          : LucideIcons.user, // single user icon
-                      size: 20,
-                      color: XColors.bodyText.withValues(alpha: 0.7),
-                    )
+                isGroup ? LucideIcons.users : LucideIcons.user,
+                size: 20,
+                color: XColors.bodyText.withOpacity(0.7),
+              )
                   : null,
             ),
-
             const SizedBox(width: 12),
 
-            /// TEXTS
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  /// NAME + TIME + UNREAD BADGE
+                  // Name + time + unread
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            chatName,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: XColors.primaryText,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                chatName,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: XColors.primaryText,
+                                  fontSize: 14,
+                                  fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+                                ),
+                              ),
                             ),
-                          ),
-
-                          if (unread) ...[
-                            const SizedBox(width: 6),
-                            Icon(
-                              LucideIcons.message_square_dot,
-                              color: XColors.primary,
-                              size: 12,
-                            ),
+                            if (unread) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: XColors.primary.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  unreadCount > 99 ? '99+' : '$unreadCount',
+                                  style: const TextStyle(
+                                    color: XColors.primary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-
+                      const SizedBox(width: 10),
                       Text(
                         time,
                         style: TextStyle(
-                          color: XColors.bodyText.withValues(alpha: 0.5),
+                          color: XColors.bodyText.withOpacity(0.5),
                           fontSize: 9,
                         ),
                       ),
@@ -99,26 +116,25 @@ class SingleChatCard extends StatelessWidget {
 
                   const SizedBox(height: 4),
 
-                  /// LAST MESSAGE (with optional sender name)
                   RichText(
                     overflow: TextOverflow.ellipsis,
                     maxLines: 2,
                     text: TextSpan(
                       children: [
-                        if (isGroup && lastSenderName != null) ...[
+                        if (isGroup && lastSenderName != null && lastSenderName!.trim().isNotEmpty) ...[
                           TextSpan(
                             text: '${lastSenderName!}: ',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10,
                               color: Colors.blue,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
                         TextSpan(
                           text: lastMessage,
                           style: TextStyle(
-                            color: XColors.bodyText.withValues(alpha: 0.7),
+                            color: XColors.bodyText.withOpacity(0.7),
                             fontSize: 10,
                           ),
                         ),
