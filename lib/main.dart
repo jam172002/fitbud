@@ -1,3 +1,4 @@
+import 'package:fitbud/tools/firebase_seed.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -27,6 +28,8 @@ Future<void> main() async {
 
   // AuthController requires Repos
   Get.put<AuthController>(AuthController(Get.find<Repos>()), permanent: true);
+  // 🚨 RUN ONLY ONCE
+  //await FirebaseSeed.seedAll();
 
   runApp(const MainApp());
 }

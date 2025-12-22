@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'activities/activity_repo.dart';
 import 'auth/auth_repo.dart';
 import 'buddies/buddy_repo.dart';
 import 'groups/group_repo.dart';
@@ -17,7 +18,7 @@ class Repos {
   final FirebaseAuth auth;
   final FirebaseStorage storage;
   final FirebaseFunctions functions;
-
+  late final ActivityRepo activityRepo = ActivityRepo(db, auth);
   late final AuthRepo authRepo = AuthRepo(db, auth);
   late final BuddyRepo buddyRepo = BuddyRepo(db, auth);
   late final GroupRepo groupRepo = GroupRepo(db, auth);

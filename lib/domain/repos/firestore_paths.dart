@@ -6,6 +6,7 @@ class FirestorePaths {
   static const groups = 'groups';
   static const conversations = 'conversations';
   static const sessions = 'sessions';
+  static const String activities = 'activities';
   static const gyms = 'gyms';
   static const plans = 'plans';
   static const subscriptions = 'subscriptions';

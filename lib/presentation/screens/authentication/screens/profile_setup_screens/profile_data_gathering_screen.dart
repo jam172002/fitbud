@@ -1,23 +1,29 @@
 import 'dart:io';
-import 'package:fitbud/presentation/screens/authentication/screens/profile_setup_screens/ps_about_page.dart';
-import 'package:fitbud/presentation/screens/authentication/screens/profile_setup_screens/ps_activities_page.dart';
-import 'package:fitbud/presentation/screens/authentication/screens/profile_setup_screens/ps_gym_page.dart';
-import 'package:fitbud/presentation/screens/authentication/screens/profile_setup_screens/ps_image_selection_page.dart';
-import 'package:fitbud/utils/colors.dart';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+
+import 'package:fitbud/utils/colors.dart';
 import '../../../../../common/appbar/common_appbar.dart';
 import '../../../../../common/widgets/gym_name_input_dialog.dart';
 import '../../../../../common/widgets/simple_dialog.dart';
+
+import '../../../../../domain/repos/repo_provider.dart';
 import '../../../navigation/user_navigation.dart';
 import '../../controllers/auth_controller.dart';
+
+import 'ps_about_page.dart';
+import 'ps_activities_page.dart';
+import 'ps_gym_page.dart';
+import 'ps_image_selection_page.dart';
 
 class ProfileDataGatheringScreen extends StatefulWidget {
   const ProfileDataGatheringScreen({super.key});
 
   @override
-  State<ProfileDataGatheringScreen> createState() => _ProfileDataGatheringScreenState();
+  State<ProfileDataGatheringScreen> createState() =>
+      _ProfileDataGatheringScreenState();
 }
 
 class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen> {
@@ -32,39 +38,53 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
   XFile? _selectedImageFile;
   final ImagePicker _picker = ImagePicker();
 
-  // Page 1: Activities
-  final List<String> _allActivities = const [
-    'Badminton',
-    'Cricket',
-    'Football',
-    'Tennis',
-    'Gym',
-    'Yoga',
-    'Running',
-    'Swimming',
-    'Cycling',
-    'Basketball',
-    'Table Tennis',
-  ];
+  // Page 1: Activities (from Firebase)
+  late final Stream<List<String>> _activities$;
   final Set<String> _selectedActivities = {};
   String? _favouriteActivity;
 
-  // Page 2: Gym info
+  // Page 2: Gyms (from Firebase)
+  late final Stream<List<String>> _gyms$;
   bool? _hasGym;
-  final List<String> _gyms = const [
-    '-- select --',
-    'FitHub Lahore',
-    'PowerHouse Gym',
-    'City Fitness Club',
-    'not found in list',
-  ];
   String? _selectedGym;
   String? _customGymName;
 
   // Page 3: About yourself
   final TextEditingController _aboutController = TextEditingController();
+  final Repos repos = Get.find<Repos>();
 
   bool _submitting = false;
+
+
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Prefill from existing profile if any (keeps UX consistent)
+    final me = authC.me.value;
+    if (me != null) {
+      _selectedActivities.addAll(me.activities ?? const []);
+      final fav = me.favouriteActivity;
+      _favouriteActivity = (fav != null && fav.trim().isNotEmpty) ? fav : null;
+
+      _hasGym = me.hasGym;
+      final gName = me.gymName;
+      _selectedGym = (gName != null && gName.trim().isNotEmpty) ? gName : null;
+
+      _aboutController.text = (me.about ?? '');
+      // Note: We do not prefill image picker with network URL. Image selection is local.
+    }
+
+    _activities$ = repos.activityRepo
+        .watchActiveActivities()
+        .map((list) => list.map((a) => a.name).toList());
+
+    _gyms$ = repos.gymRepo
+        .watchGyms()
+        .map((list) => list.map((g) => g.name).toList());
+
+  }
 
   @override
   void dispose() {
@@ -80,14 +100,15 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
     switch (pageIndex) {
       case 0:
         return _selectedImageFile != null;
+
       case 1:
         return _selectedActivities.length >= 3 && _favouriteActivity != null;
+
       case 2:
         if (_hasGym == null) return false;
 
         if (_hasGym == true) {
           if (_selectedGym == null) return false;
-
           final sel = _selectedGym!.trim();
           if (sel.isEmpty) return false;
           if (sel == '-- select --') return false;
@@ -96,14 +117,13 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
             final custom = (_customGymName ?? '').trim();
             return custom.isNotEmpty;
           }
-
           return true;
         }
-
         return true;
 
       case 3:
         return _aboutController.text.trim().isNotEmpty;
+
       default:
         return false;
     }
@@ -185,9 +205,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
     }
   }
 
-  void _removeSelectedImage() {
-    setState(() => _selectedImageFile = null);
-  }
+  void _removeSelectedImage() => setState(() => _selectedImageFile = null);
 
   Future<String?> _openGymInputDialog() async {
     final result = await Get.dialog<String?>(
@@ -235,6 +253,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
         gymName: gymNameToSave,
         about: _aboutController.text.trim(),
       );
+
       if (!res.ok) {
         await _showSimpleMessage(
           res.message,
@@ -244,9 +263,8 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
         return;
       }
 
-// success -> go to home
+      // success -> go to home
       Get.offAll(() => UserNavigation());
-
     } catch (e) {
       await _showSimpleMessage(
         'Failed to complete profile: $e',
@@ -265,23 +283,35 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
     if (!_isPageValid(_currentPage)) {
       switch (_currentPage) {
         case 0:
-          await _showSimpleMessage('Please select an image for your profile.', icon: Icons.photo);
+          await _showSimpleMessage(
+            'Please select an image for your profile.',
+            icon: Icons.photo,
+          );
           return;
+
         case 1:
           if (_selectedActivities.length < 3) {
-            await _showSimpleMessage('Please select at least 3 activities you are interested in.',
-                icon: Icons.checklist);
+            await _showSimpleMessage(
+              'Please select at least 3 activities you are interested in.',
+              icon: Icons.checklist,
+            );
             return;
           }
           if (_favouriteActivity == null) {
-            await _showSimpleMessage('Please select your favourite activity.', icon: Icons.star);
+            await _showSimpleMessage(
+              'Please select your favourite activity.',
+              icon: Icons.star,
+            );
             return;
           }
           return;
+
         case 2:
           if (_hasGym == null) {
-            await _showSimpleMessage('Please tell us whether you have joined a gym.',
-                icon: Icons.fitness_center);
+            await _showSimpleMessage(
+              'Please tell us whether you have joined a gym.',
+              icon: Icons.fitness_center,
+            );
             return;
           }
           if (_hasGym == true) {
@@ -292,9 +322,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
               );
               return;
             }
-
             final sel = _selectedGym!.trim();
-
             if (sel.isEmpty || sel == '-- select --') {
               await _showSimpleMessage(
                 'Please select your gym or add it via "not found in list".',
@@ -302,7 +330,6 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
               );
               return;
             }
-
             if (sel == 'not found in list' && (_customGymName ?? '').trim().isEmpty) {
               await _showSimpleMessage(
                 'Please enter your gym name.',
@@ -311,11 +338,14 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
               return;
             }
           }
-
           return;
+
         case 3:
           if (_aboutController.text.trim().isEmpty) {
-            await _showSimpleMessage('Please write something about yourself.', icon: Icons.edit);
+            await _showSimpleMessage(
+              'Please write something about yourself.',
+              icon: Icons.edit,
+            );
             return;
           }
           return;
@@ -337,19 +367,20 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
   }
 
   void _prevPage() {
-    if (_currentPage > 0) {
-      setState(() => _currentPage -= 1);
-      _pageController.animateToPage(
-        _currentPage,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.ease,
-      );
-    }
+    if (_currentPage <= 0) return;
+    setState(() => _currentPage -= 1);
+    _pageController.animateToPage(
+      _currentPage,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.ease,
+    );
   }
 
+  // ---------------------
+  // UI
+  // ---------------------
   @override
   Widget build(BuildContext context) {
-    // Allow swipe always (better UX). Validation remains on Next button.
     return Scaffold(
       appBar: XAppBar(title: 'Profile Setup', showBackIcon: false),
       body: Column(
@@ -364,7 +395,9 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     height: 6,
                     decoration: BoxDecoration(
-                      color: isActive ? XColors.primary : XColors.bodyText.withValues(alpha: 0.5),
+                      color: isActive
+                          ? XColors.primary
+                          : XColors.bodyText.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
@@ -385,58 +418,80 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
                   onPickImage: _pickImage,
                   onRemoveImage: _removeSelectedImage,
                 ),
-                ProfileSetupActivitiesPage(
-                  allActivities: _allActivities,
-                  selectedActivities: _selectedActivities,
-                  favouriteActivity: _favouriteActivity,
-                  onActivitySelected: (act, remove) {
-                    setState(() {
-                      if (remove) {
-                        _selectedActivities.remove(act);
-                        if (_favouriteActivity == act) _favouriteActivity = null;
-                      } else {
-                        _selectedActivities.add(act);
-                      }
-                    });
-                  },
-                  onFavouriteSelected: (val) => setState(() => _favouriteActivity = val),
-                ),
-                ProfileSetupGymPage(
-                  hasGym: _hasGym,
-                  selectedGym: _selectedGym,
-                  customGymName: _customGymName,
-                  gyms: _gyms,
-                  onHasGymChanged: (val) {
-                    setState(() {
-                      _hasGym = val;
-                      if (val == false) {
-                        _selectedGym = null;
-                        _customGymName = null;
-                      }
-                    });
-                  },
-                  onGymChanged: (val) async {
-                    if (val == 'not found in list') {
-                      final result = await _openGymInputDialog();
-                      if (result != null && result.trim().isNotEmpty) {
+
+                StreamBuilder<List<String>>(
+                  stream: _activities$,
+                  builder: (context, snap) {
+                    final all = snap.data ?? const <String>[];
+                    return ProfileSetupActivitiesPage(
+                      allActivities: all,
+                      selectedActivities: _selectedActivities,
+                      favouriteActivity: _favouriteActivity,
+                      onActivitySelected: (act, remove) {
                         setState(() {
-                          _selectedGym = 'not found in list';
-                          _customGymName = result.trim();
+                          if (remove) {
+                            _selectedActivities.remove(act);
+                            if (_favouriteActivity == act) _favouriteActivity = null;
+                          } else {
+                            _selectedActivities.add(act);
+                          }
                         });
-                      }
-                    } else if (val == '-- select --') {
-                      setState(() {
-                        _selectedGym = '-- select --';
-                        _customGymName = null;
-                      });
-                    } else {
-                      setState(() {
-                        _selectedGym = val;
-                        _customGymName = null;
-                      });
-                    }
+                      },
+                      onFavouriteSelected: (val) => setState(() => _favouriteActivity = val),
+                    );
                   },
                 ),
+
+                StreamBuilder<List<String>>(
+                  stream: _gyms$,
+                  builder: (context, snap) {
+                    final gymsFromDb = snap.data ?? const <String>[];
+
+                    final gyms = <String>[
+                      '-- select --',
+                      ...gymsFromDb,
+                      'not found in list',
+                    ];
+
+                    return ProfileSetupGymPage(
+                      hasGym: _hasGym,
+                      selectedGym: _selectedGym,
+                      customGymName: _customGymName,
+                      gyms: gyms,
+                      onHasGymChanged: (val) {
+                        setState(() {
+                          _hasGym = val;
+                          if (val == false) {
+                            _selectedGym = null;
+                            _customGymName = null;
+                          }
+                        });
+                      },
+                      onGymChanged: (val) async {
+                        if (val == 'not found in list') {
+                          final result = await _openGymInputDialog();
+                          if (result != null && result.trim().isNotEmpty) {
+                            setState(() {
+                              _selectedGym = 'not found in list';
+                              _customGymName = result.trim();
+                            });
+                          }
+                        } else if (val == '-- select --') {
+                          setState(() {
+                            _selectedGym = '-- select --';
+                            _customGymName = null;
+                          });
+                        } else {
+                          setState(() {
+                            _selectedGym = val;
+                            _customGymName = null;
+                          });
+                        }
+                      },
+                    );
+                  },
+                ),
+
                 ProfileSetupAboutPage(controller: _aboutController),
               ],
             ),
@@ -461,13 +516,11 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
                             ),
                           ),
                           onPressed: _submitting ? null : _prevPage,
-                          child: Text(
-                            'Back',
-                            style: TextStyle(color: XColors.bodyText),
-                          ),
+                          child: Text('Back', style: TextStyle(color: XColors.bodyText)),
                         ),
                       ),
                     if (_currentPage > 0) const SizedBox(width: 12),
+
                     Expanded(
                       flex: 2,
                       child: ElevatedButton(
@@ -493,7 +546,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
                   ],
                 ),
 
-                /// Low-emphasis skip button
+                // Low-emphasis skip button
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: _submitting
@@ -501,7 +554,6 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
                       : () async {
                     await authC.updateMeFields({'isProfileComplete': false});
                     Get.offAll(() => UserNavigation());
-
                   },
                   child: Text(
                     'Skip for now',
@@ -514,7 +566,6 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
               ],
             ),
           ),
-
         ],
       ),
     );

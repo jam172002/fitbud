@@ -1,132 +1,114 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../common/firestore_model.dart';
-import '../common/geo.dart';
 
-class AppUser implements FirestoreModel {
-  @override
-  final String id; // uid
+class AppUser {
+  final String id;
 
-  final String email;
-  final String phone;
-  final String displayName;
-  final String photoUrl;
-  final String bio;
+  final String? displayName;
+  final String? email;
+  final String? phone;
+  final String? photoUrl;
+
+  final List<String>? activities;
+  final String? favouriteActivity;
+
+  final bool? hasGym;
+  final String? gymName;
+
+  final String? about;
+  final bool? isProfileComplete;
+
+  final String? city;
+  final String? gender;
   final DateTime? dob;
-  final String gender;
-  final String city;
-  final GeoPoint? lastKnownLocation;
 
-  final List<String> interests;
-  final List<String> goals;
-
-  final int buddyCount;
-  final int groupCount;
-
+  final bool? isActive;
   final DateTime? createdAt;
   final DateTime? updatedAt;
-  final bool isActive;
 
-  const AppUser({
+  AppUser({
     required this.id,
-    this.email = '',
-    this.phone = '',
-    this.displayName = '',
-    this.photoUrl = '',
-    this.bio = '',
+    this.displayName,
+    this.email,
+    this.phone,
+    this.photoUrl,
+    this.activities,
+    this.favouriteActivity,
+    this.hasGym,
+    this.gymName,
+    this.about,
+    this.isProfileComplete,
+    this.city,
+    this.gender,
     this.dob,
-    this.gender = '',
-    this.city = '',
-    this.lastKnownLocation,
-    this.interests = const [],
-    this.goals = const [],
-    this.buddyCount = 0,
-    this.groupCount = 0,
+    this.isActive,
     this.createdAt,
     this.updatedAt,
-    this.isActive = true,
   });
 
-  AppUser copyWith({
-    String? email,
-    String? phone,
-    String? displayName,
-    String? photoUrl,
-    String? bio,
-    DateTime? dob,
-    String? gender,
-    String? city,
-    GeoPoint? lastKnownLocation,
-    List<String>? interests,
-    List<String>? goals,
-    int? buddyCount,
-    int? groupCount,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    bool? isActive,
-  }) {
-    return AppUser(
-      id: id,
-      email: email ?? this.email,
-      phone: phone ?? this.phone,
-      displayName: displayName ?? this.displayName,
-      photoUrl: photoUrl ?? this.photoUrl,
-      bio: bio ?? this.bio,
-      dob: dob ?? this.dob,
-      gender: gender ?? this.gender,
-      city: city ?? this.city,
-      lastKnownLocation: lastKnownLocation ?? this.lastKnownLocation,
-      interests: interests ?? this.interests,
-      goals: goals ?? this.goals,
-      buddyCount: buddyCount ?? this.buddyCount,
-      groupCount: groupCount ?? this.groupCount,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      isActive: isActive ?? this.isActive,
-    );
-  }
+  // -----------------------
+  // Firestore → Model
+  // -----------------------
+  factory AppUser.fromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
 
-  static AppUser fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data() ?? {};
     return AppUser(
       id: doc.id,
-      email: FirestoreModel.readString(d['email']),
-      phone: FirestoreModel.readString(d['phone']),
-      displayName: FirestoreModel.readString(d['displayName']),
-      photoUrl: FirestoreModel.readString(d['photoUrl']),
-      bio: FirestoreModel.readString(d['bio']),
-      dob: FirestoreModel.readDate(d['dob']),
-      gender: FirestoreModel.readString(d['gender']),
-      city: FirestoreModel.readString(d['city']),
-      lastKnownLocation: GeoPointX.fromAny(d['lastKnownLocation']),
-      interests: FirestoreModel.readStringList(d['interests']),
-      goals: FirestoreModel.readStringList(d['goals']),
-      buddyCount: FirestoreModel.readInt(d['buddyCount']),
-      groupCount: FirestoreModel.readInt(d['groupCount']),
-      createdAt: FirestoreModel.readDate(d['createdAt']),
-      updatedAt: FirestoreModel.readDate(d['updatedAt']),
-      isActive: FirestoreModel.readBool(d['isActive'], fallback: true),
+      displayName: d['displayName'],
+      email: d['email'],
+      phone: d['phone'],
+      photoUrl: d['photoUrl'],
+
+      activities: (d['activities'] as List?)?.cast<String>(),
+      favouriteActivity: d['favouriteActivity'],
+
+      hasGym: d['hasGym'],
+      gymName: d['gymName'],
+
+      about: d['about'],
+      isProfileComplete: d['isProfileComplete'],
+
+      city: d['city'],
+      gender: d['gender'],
+      dob: d['dob'] != null
+          ? (d['dob'] as Timestamp).toDate()
+          : null,
+
+      isActive: d['isActive'],
+      createdAt: d['createdAt'] != null
+          ? (d['createdAt'] as Timestamp).toDate()
+          : null,
+      updatedAt: d['updatedAt'] != null
+          ? (d['updatedAt'] as Timestamp).toDate()
+          : null,
     );
   }
 
-  @override
+  // -----------------------
+  // Model → Firestore
+  // -----------------------
   Map<String, dynamic> toMap() {
     return {
+      'displayName': displayName,
       'email': email,
       'phone': phone,
-      'displayName': displayName,
       'photoUrl': photoUrl,
-      'bio': bio,
-      'dob': FirestoreModel.ts(dob),
-      'gender': gender,
+
+      'activities': activities,
+      'favouriteActivity': favouriteActivity,
+
+      'hasGym': hasGym,
+      'gymName': gymName,
+
+      'about': about,
+      'isProfileComplete': isProfileComplete,
+
       'city': city,
-      'lastKnownLocation': lastKnownLocation,
-      'interests': interests,
-      'goals': goals,
-      'buddyCount': buddyCount,
-      'groupCount': groupCount,
-      'createdAt': FirestoreModel.ts(createdAt),
-      'updatedAt': FirestoreModel.ts(updatedAt),
+      'gender': gender,
+      'dob': dob != null ? Timestamp.fromDate(dob!) : null,
+
       'isActive': isActive,
+      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
+      'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
     };
   }
 }

@@ -12,6 +12,7 @@ class AuthController extends GetxController {
   AuthController(this._repos);
 
   final Repos _repos;
+  Repos get repos => _repos;
 
   // reactive state
   final RxBool isLoading = false.obs;

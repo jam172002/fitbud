@@ -6,7 +6,7 @@ import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 import '../chats/inbox_screen.dart';
 import '../gyms/gyms_screen.dart';
 import '../home/home.dart';
-import '../profile/profile_screen.dart';
+import '../profile/profile_tab.dart';
 
 class UserNavigation extends StatefulWidget {
   const UserNavigation({super.key});
