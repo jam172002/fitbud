@@ -20,11 +20,23 @@ class GymRepo extends RepoBase {
   // ---- Gyms ----
 
   Stream<List<Gym>> watchGyms({String city = '', int limit = 50}) {
-    var q = col(FirestorePaths.gyms).where('status', isEqualTo: GymStatus.active.name);
+    var q = col(FirestorePaths.gyms)
+        .where('status', isEqualTo: GymStatus.active.name);
+
     if (city.isNotEmpty) q = q.where('city', isEqualTo: city);
-    return q.orderBy('createdAt', descending: true).limit(limit).snapshots()
-        .map((s) => s.docs.map(Gym.fromDoc).toList());
+
+    // Do not orderBy until all docs guaranteed to have createdAt
+    return q.limit(limit).snapshots().map((s) {
+      final list = s.docs.map(Gym.fromDoc).toList();
+      list.sort((a, b) {
+        final ad = a.createdAt ?? a.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bd = b.createdAt ?? b.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bd.compareTo(ad);
+      });
+      return list;
+    });
   }
+
 
   Future<Gym> getGym(String gymId) async {
     final s = await doc('${FirestorePaths.gyms}/$gymId').get();
