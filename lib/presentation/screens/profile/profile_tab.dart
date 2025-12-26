@@ -10,6 +10,8 @@ import 'package:iconsax/iconsax.dart';
 import '../../../User-App/features/service/controllers/plans_controller.dart';
 import '../../../common/widgets/section_heading.dart';
 import '../../../common/widgets/simple_dialog.dart';
+import '../../../domain/models/auth/app_user.dart';
+import '../../../domain/repos/repo_provider.dart';
 import '../budy/all_buddy_requests_screen.dart';
 import '../budy/all_session_invites_screen.dart';
 import '../settings/settings_screen.dart';
@@ -20,14 +22,7 @@ class ProfileScreen extends StatelessWidget {
   ProfileScreen({super.key});
 
   final PremiumPlanController planController = Get.find();
-
-  final List<Map<String, String>> recentBuddies = List.generate(
-    10,
-    (index) => {
-      'name': 'Buddy ${index + 1}',
-      'avatar': 'https://i.pravatar.cc/150?img=${index + 1}',
-    },
-  );
+  final Repos repos = Get.find<Repos>();
 
   void checkPremiumAndProceed(VoidCallback onAllowed) {
     if (planController.hasPremium) {
@@ -44,6 +39,17 @@ class ProfileScreen extends StatelessWidget {
     }
   }
 
+  ImageProvider _avatarProvider(String? url) {
+    final u = (url ?? '').trim();
+    if (u.isEmpty || u == 'null') {
+      return const AssetImage('assets/images/buddy.jpg');
+    }
+    if (u.startsWith('http://') || u.startsWith('https://')) {
+      return NetworkImage(u);
+    }
+    return AssetImage(u);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -51,52 +57,99 @@ class ProfileScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
-            /// ================= Profile Header =================
-            GestureDetector(
-              onTap: () {
-                Get.to(() => UserProfileDetailsScreen());
-              },
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    const CircleAvatar(
-                      radius: 28,
-                      backgroundImage: AssetImage('assets/images/buddy.jpg'),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+            /// ================= Profile Header (REAL) =================
+            StreamBuilder<AppUser?>(
+              stream: repos.authRepo.watchMe(),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    height: 70,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final me = snap.data;
+
+                if (me == null) {
+                  return GestureDetector(
+                    onTap: () => Get.to(() => UserProfileDetailsScreen()),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
                         children: const [
-                          Text(
-                            'Muhammad Sufyan',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundImage: AssetImage('assets/images/buddy.jpg'),
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'sufyan@email.com',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          SizedBox(width: 14),
+                          Expanded(
+                            child: Text(
+                              'Profile not found',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
+                  );
+                }
+
+                final name = (me.displayName ?? '').trim().isEmpty ? 'User' : (me.displayName ?? '');
+                final email = (me.email ?? '').trim();
+
+                return GestureDetector(
+                  onTap: () => Get.to(() => UserProfileDetailsScreen()),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundImage: _avatarProvider(me.photoUrl),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                email.isEmpty ? ' ' : email,
+                                style: const TextStyle(fontSize: 13, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
 
             const SizedBox(height: 22),
 
-            /// ================= Recent Buddies =================
+            /// ================= Recent Buddies (REAL) =================
             XHeading(
               title: 'Recent Buddies',
               actionText: '',
@@ -104,50 +157,46 @@ class ProfileScreen extends StatelessWidget {
               sidePadding: 0,
             ),
             const SizedBox(height: 16),
-            recentBuddies.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No recent buddies to show',
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                  )
-                : SizedBox(
-                    height: 70,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: recentBuddies.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 12),
-                      itemBuilder: (context, index) {
-                        final buddy = recentBuddies[index];
-                        return GestureDetector(
-                          onTap: () {
-                            Get.to(
-                              () => BuddyProfileScreen(
-                                scenario: BuddyScenario.existingBuddy,
-                              ),
-                            );
-                          },
-                          child: Column(
-                            children: [
-                              CircleAvatar(
-                                radius: 22,
-                                backgroundImage: NetworkImage(buddy['avatar']!),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                buddy['name']!,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+
+            StreamBuilder<List<AppUser>>(
+              stream: repos.buddyRepo.watchRecentBuddies(limit: 10),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(height: 70);
+                }
+
+                final recent = snap.data ?? [];
+
+                // ✅ If recent exists → show it
+                if (recent.isNotEmpty) {
+                  return _BuddiesRow(
+                    buddies: recent,
+                    avatarProvider: _avatarProvider,
+                  );
+                }
+
+                // ✅ Otherwise fallback once (past buddies)
+                return FutureBuilder<List<AppUser>>(
+                  future: repos.buddyRepo.loadAnyBuddies(limit: 10),
+                  builder: (context, fb) {
+                    if (fb.connectionState == ConnectionState.waiting) {
+                      return const SizedBox(height: 70);
+                    }
+
+                    final buddies = fb.data ?? [];
+
+                    if (buddies.isEmpty) {
+                      return const _ClosedEmptyState();
+                    }
+
+                    return _BuddiesRow(
+                      buddies: buddies,
+                      avatarProvider: _avatarProvider,
+                    );
+                  },
+                );
+              },
+            ),
 
             const SizedBox(height: 24),
 
@@ -204,6 +253,95 @@ class ProfileScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// ================= Recent Buddies Row =================
+class _BuddiesRow extends StatelessWidget {
+  final List<AppUser> buddies;
+  final ImageProvider Function(String? url) avatarProvider;
+
+  const _BuddiesRow({
+    required this.buddies,
+    required this.avatarProvider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 70,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: buddies.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final u = buddies[index];
+          final name = (u.displayName ?? '').trim().isEmpty ? 'Buddy' : (u.displayName ?? '');
+
+          return GestureDetector(
+            onTap: () {
+              Get.to(
+                    () => BuddyProfileScreen(
+                  scenario: BuddyScenario.existingBuddy,
+                  // If your BuddyProfileScreen supports an id, pass it:
+                  // buddyId: u.id,
+                ),
+              );
+            },
+            child: Column(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundImage: avatarProvider(u.photoUrl),
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: 60,
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// ================= Closed Empty State =================
+class _ClosedEmptyState extends StatelessWidget {
+  const _ClosedEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: XColors.secondaryBG.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: const [
+          Icon(Iconsax.user_add, color: XColors.primary),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'No buddies yet. Send requests to start chatting.',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }

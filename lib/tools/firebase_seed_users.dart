@@ -8,9 +8,9 @@ class FirebaseSeedUsers {
 
   // Your provided UIDs (demo buddies)
   static const List<String> demoUids = <String>[
-    'furz8yYJR7NEFLbQYPlDzvcfRX73',
-    'jTcq9BKpR8hejSP5H8xgjOL3aaD2',
-    'TsqnFnuVX2ZwdLZDVqc4N7KWo8r2',
+    '1psiSmyWnFNs24laE99z43YoNQp2',
+    '4hDDGw2UYcPZhQk4h2MkprDVWCJ2',
+    'fKAY3piJMrV8siO5lSphQ1ttVsF3',
   ];
 
   /// Run ALL seeding (profiles + friendships + direct chats)

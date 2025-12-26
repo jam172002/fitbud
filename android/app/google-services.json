@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "746386081344",
-    "project_id": "fitbud-7e518",
-    "storage_bucket": "fitbud-7e518.firebasestorage.app"
+    "project_number": "900712761830",
+    "project_id": "fitbud-46f70",
+    "storage_bucket": "fitbud-46f70.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:746386081344:android:45c0c34ba301f68b0d01a5",
+        "mobilesdk_app_id": "1:900712761830:android:d5a3ff698713767c2f6e27",
         "android_client_info": {
           "package_name": "com.example.fitbud"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCSnbYCzBZI9q8x2LxEKy0z2Fa3xMYuZ3U"
+          "current_key": "AIzaSyC-qlTQfT7LSxai6Ak-lolUYupFRtvWmls"
         }
       ],
       "services": {

@@ -244,4 +244,54 @@ class BuddyRepo extends RepoBase {
       return out;
     });
   }
+
+  /// Shows "recent buddies" if possible; otherwise falls back to "past buddies"
+  /// (any friendships where userIds contains uid).
+  ///
+  /// Recent = orderBy(createdAt desc) if field exists.
+  /// Fallback = no orderBy (works even if some docs are missing createdAt).
+  /// Step 1: RECENT buddies (ordered)
+  Stream<List<AppUser>> watchRecentBuddies({int limit = 10}) {
+    final uid = _uid();
+
+    return col(FirestorePaths.friendships)
+        .where('userIds', arrayContains: uid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .asyncMap((snap) => _friendshipsToUsers(uid, snap.docs));
+  }
+
+  /// Step 2: FALLBACK buddies (no orderBy)
+  Future<List<AppUser>> loadAnyBuddies({int limit = 10}) async {
+    final uid = _uid();
+
+    final snap = await col(FirestorePaths.friendships)
+        .where('userIds', arrayContains: uid)
+        .limit(limit)
+        .get();
+
+    return _friendshipsToUsers(uid, snap.docs);
+  }
+
+  Future<List<AppUser>> _friendshipsToUsers(
+      String uid,
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+      ) async {
+    if (docs.isEmpty) return [];
+
+    final friendships = docs.map(Friendship.fromDoc).toList();
+    final otherIds = friendships
+        .map((f) => f.userAId == uid ? f.userBId : f.userAId)
+        .toList();
+
+    final usersSnap = await col(FirestorePaths.users)
+        .where(FieldPath.documentId, whereIn: otherIds)
+        .get();
+
+    final users = usersSnap.docs.map(AppUser.fromDoc).toList();
+    final map = {for (final u in users) u.id: u};
+
+    return otherIds.map((id) => map[id]).whereType<AppUser>().toList();
+  }
 }

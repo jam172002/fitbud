@@ -29,9 +29,9 @@ Future<void> seedFriendships() async {
   const mainUid = 'rjLuAokrvqQsZgk64u07vYg1uD73';
 
   const otherUids = <String>[
-    'TsqnFnuVX2ZwdLZDVqc4N7KWo8r2',
-    'jTcq9BKpR8hejSP5H8xgjOL3aaD2',
-    'furz8yYJR7NEFLbQYPlDzvcfRX73',
+    '1psiSmyWnFNs24laE99z43YoNQp2',
+    '4hDDGw2UYcPZhQk4h2MkprDVWCJ2',
+    'fKAY3piJMrV8siO5lSphQ1ttVsF3',
   ];
 
   final batch = db.batch();

@@ -30,10 +30,10 @@ Future<void> main() async {
   // AuthController requires Repos
   Get.put<AuthController>(AuthController(Get.find<Repos>()), permanent: true);
   // 🚨 RUN ONLY ONCE
-  //await FirebaseSeed.seedAll();
+  await FirebaseSeed.seedAll();
 
   // RUN ONCE, then remove
-  //await FirebaseSeedUsers.seedProfilesForExistingUids();
+  await FirebaseSeedUsers.seedProfilesForExistingUids();
   await FirebaseSeedUsers.seedAll();
 
   runApp(const MainApp());

@@ -26,6 +26,7 @@ class PremiumPlanScreen extends StatelessWidget {
           'Access to Free Content',
         ],
       },
+
       {
         'title': 'Standard',
         'description': 'Enjoy app functionalities for 1 month.',
