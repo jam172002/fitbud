@@ -2,12 +2,11 @@ import 'dart:async';
 import 'package:fitbud/utils/colors.dart';
 import 'package:fitbud/utils/enums.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 
-import '../../../User-App/features/service/controllers/location_controller.dart';
-import '../../../User-App/features/service/controllers/plans_controller.dart';
+import '../authentication/controllers/location_controller.dart';
+import '../subscription/plans_controller.dart';
 import '../../../common/bottom_sheets/location_bottom_sheet.dart';
 import '../../../common/widgets/catagory_item_icon.dart';
 import '../../../common/widgets/home_appbar.dart';
@@ -15,7 +14,6 @@ import '../../../common/widgets/home_product_banner.dart';
 import '../../../common/widgets/home_session_invite_card.dart';
 import '../../../common/widgets/plan_card.dart';
 import '../../../common/widgets/section_heading.dart';
-import '../../../common/widgets/simple_dialog.dart';
 import '../budy/all_session_invites_screen.dart';
 import '../budy/buddy_find_swipper.dart';
 import '../budy/specific_catagory_buddies_match_screen.dart';
@@ -81,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 🔥 Reusable Function: Stop navigation & show your dialog
   void checkPremiumAndProceed(VoidCallback onAllowed) {
-    if (planController.hasPremium) {
+    /*if (planController.hasPremium) {
       onAllowed();
     } else {
       Get.dialog(
@@ -93,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
           buttonText: "Ok",
         ),
       );
-    }
+    }*/
   }
 
   final List<Map<String, String>> _banners = [
@@ -199,13 +197,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 locationController.updateLocation(pickedLocation);
               }
             },
-            hasPremium: planController.hasPremium, // ← Controller value
+            //hasPremium: planController.hasPremium, // ← Controller value
             onScanTap: () {
               Get.to(() => QRScanScreen());
             },
             onNotificationTap: () {
               Get.to(() => NotificationsScreen());
-            },
+            }, hasPremium: true,
           ),
         ),
       ),

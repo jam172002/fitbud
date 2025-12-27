@@ -7,9 +7,8 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 
-import '../../../User-App/features/service/controllers/plans_controller.dart';
+import '../subscription/plans_controller.dart';
 import '../../../common/widgets/section_heading.dart';
-import '../../../common/widgets/simple_dialog.dart';
 import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/repos/repo_provider.dart';
 import '../budy/all_buddy_requests_screen.dart';
@@ -25,7 +24,7 @@ class ProfileScreen extends StatelessWidget {
   final Repos repos = Get.find<Repos>();
 
   void checkPremiumAndProceed(VoidCallback onAllowed) {
-    if (planController.hasPremium) {
+    /*if (planController.hasPremium) {
       onAllowed();
     } else {
       Get.dialog(
@@ -36,7 +35,7 @@ class ProfileScreen extends StatelessWidget {
           buttonText: "Ok",
         ),
       );
-    }
+    }*/
   }
 
   ImageProvider _avatarProvider(String? url) {

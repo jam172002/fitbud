@@ -1,4 +1,4 @@
-import 'package:fitbud/User-App/features/service/controllers/plans_controller.dart';
+import 'package:fitbud/presentation/screens/subscription/plans_controller.dart';
 import 'package:fitbud/common/widgets/payment_account_number_dialog.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:fitbud/utils/enums.dart';

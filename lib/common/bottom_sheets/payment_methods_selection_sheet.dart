@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
 
-import '../../User-App/features/service/controllers/plans_controller.dart';
+import '../../presentation/screens/subscription/plans_controller.dart';
 import '../widgets/order_id_dialog.dart';
 import '../widgets/payment_account_number_dialog.dart';
 

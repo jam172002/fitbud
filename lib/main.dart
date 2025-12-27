@@ -7,8 +7,8 @@ import 'app.dart';
 import 'domain/repos/repo_provider.dart';
 import 'firebase_options.dart';
 import 'package:fitbud/presentation/screens/authentication/controllers/auth_controller.dart';
-import 'package:fitbud/User-App/features/service/controllers/location_controller.dart';
-import 'package:fitbud/User-App/features/service/controllers/plans_controller.dart';
+import 'package:fitbud/presentation/screens/authentication/controllers/location_controller.dart';
+import 'package:fitbud/presentation/screens/subscription/plans_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +28,8 @@ Future<void> main() async {
   );
 
   Get.put(LocationController(), permanent: true);
-  Get.put(PremiumPlanController(), permanent: true);
+  Get.put(PremiumPlanController());
+
 
   Get.put<AuthController>(
     AuthController(Get.find<Repos>()),

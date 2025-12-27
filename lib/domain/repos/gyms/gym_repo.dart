@@ -1,8 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../domain/models/gyms/gym.dart';
-import '../../../domain/models/gyms/plan.dart';
-import '../../../domain/models/gyms/subscription.dart';
-import '../../../domain/models/gyms/payment_transaction.dart';
+import '../../models/plans/plan.dart';
+import '../../models/subscription/subscription.dart';
+import '../../models/subscription/payment_transaction.dart';
 import '../firestore_paths.dart';
 import '../firestore_repo_base.dart';
 import '../repo_exceptions.dart';
