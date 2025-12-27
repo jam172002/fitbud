@@ -113,7 +113,6 @@ class AppUser {
       'phone': phone,
       'photoUrl': photoUrl,
 
-      // Premium fields
       'isPremium': isPremium,
       'premiumUntil': premiumUntil != null ? Timestamp.fromDate(premiumUntil!) : null,
       'activePlanId': activePlanId,

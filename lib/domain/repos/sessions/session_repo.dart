@@ -51,6 +51,14 @@ class SessionRepo extends RepoBase {
   }) async {
     final uid = _uid();
     final ref = col(FirestorePaths.sessionInvites(sessionId)).doc();
+
+    // Read session + inviter user in parallel (best effort)
+    final sessionSnap = await doc('${FirestorePaths.sessions}/$sessionId').get();
+    final inviterSnap = await db.collection('users').doc(uid).get();
+
+    final sessionData = sessionSnap.data();
+    final inviterData = inviterSnap.data();
+
     await ref.set({
       'sessionId': sessionId,
       'invitedUserId': invitedUserId,
@@ -58,19 +66,32 @@ class SessionRepo extends RepoBase {
       'status': InviteStatus.pending.name,
       'createdAt': FieldValue.serverTimestamp(),
       'respondedAt': null,
+
+      // -------- snapshot fields for Home UI --------
+      'sessionCategory': sessionData?['category'] ?? sessionData?['title'] ?? '',
+      'sessionImageUrl': sessionData?['imageUrl'] ?? sessionData?['image'] ?? '',
+      'sessionLocationText': sessionData?['location'] ?? sessionData?['locationText'] ?? '',
+      'sessionDateTime': sessionData?['dateTime'] ?? sessionData?['scheduledAt'] ?? null,
+
+      'invitedByName': inviterData?['displayName'] ?? '',
+      'invitedByPhotoUrl': inviterData?['photoUrl'] ?? '',
     });
+
     return ref.id;
   }
 
-  Stream<List<SessionInvite>> watchMySessionInvites() {
+
+  Stream<List<SessionInvite>> watchMySessionInvites({int limit = 50}) {
     final uid = _uid();
     return db.collectionGroup('invites')
         .where('invitedUserId', isEqualTo: uid)
         .where('status', isEqualTo: InviteStatus.pending.name)
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((q) => q.docs.map(SessionInvite.fromDoc).toList());
   }
+
 
   Future<void> acceptSessionInvite({
     required String sessionId,
