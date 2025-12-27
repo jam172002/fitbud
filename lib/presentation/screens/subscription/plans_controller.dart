@@ -172,7 +172,7 @@ class PremiumPlanController extends GetxController {
     _plansSub = _db
         .collection('plans')
         .where('isActive', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
+        //.orderBy('createdAt', descending: true)
         .snapshots()
         .listen((snap) {
       plans.value = snap.docs.map((d) => Plan.fromDoc(d)).toList();
