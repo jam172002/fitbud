@@ -141,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           title: 'Badminton',
                           onTap: () {
                             checkPremiumAndProceed(() {
-                              Get.to(() => SpecificCatagoryBuddiesMatchScreen());
+                              Get.to(() => SpecificCatagoryBuddiesMatchScreen(activity: '',));
                             });
                           },
                         );
@@ -266,7 +266,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             image: (inv.sessionImageUrl?.isNotEmpty == true) ? inv.sessionImageUrl! : 'assets/images/gym.jpeg',
 
                             nameOnTap: () {
-                              Get.to(() => BuddyProfileScreen(scenario: BuddyScenario.existingBuddy));
+                              if (inv.invitedByUserId.isNotEmpty) {
+                                Get.to(() => BuddyProfileScreen(
+                                  scenario: BuddyScenario.existingBuddy,
+                                  buddyId: inv.invitedByUserId,
+                                ));
+                              }
                             },
                           );
                         },

@@ -158,7 +158,7 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 16),
 
             StreamBuilder<List<AppUser>>(
-              stream: repos.buddyRepo.watchRecentBuddies(limit: 10),
+              stream: repos.buddyRepo.watchMyBuddiesUsers(limit: 10),
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const SizedBox(height: 70);
@@ -284,8 +284,7 @@ class _BuddiesRow extends StatelessWidget {
               Get.to(
                     () => BuddyProfileScreen(
                   scenario: BuddyScenario.existingBuddy,
-                  // If your BuddyProfileScreen supports an id, pass it:
-                  // buddyId: u.id,
+                  buddyId: u.id,
                 ),
               );
             },

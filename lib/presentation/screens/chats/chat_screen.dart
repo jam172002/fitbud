@@ -263,12 +263,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         elevation: 0,
         leading: GestureDetector(
           onTap: () {
-            if (!widget.isGroup) {
+            if (!widget.isGroup && widget.directOtherUserId.isNotEmpty) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => BuddyProfileScreen(
                     scenario: BuddyScenario.existingBuddy,
+                    buddyId: widget.directOtherUserId,
                   ),
                 ),
               );
@@ -291,9 +292,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ),
         title: GestureDetector(
           onTap: () {
-            if (!widget.isGroup) {
+            if (!widget.isGroup && widget.directOtherUserId.isNotEmpty) {
               Get.to(() => BuddyProfileScreen(
                 scenario: BuddyScenario.existingBuddy,
+                buddyId: widget.directOtherUserId,
               ));
             }
           },

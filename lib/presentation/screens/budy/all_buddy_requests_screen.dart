@@ -1,13 +1,14 @@
 import 'package:fitbud/utils/colors.dart';
-import 'package:fitbud/utils/enums.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get_navigation/src/extension_navigation.dart';
-import 'package:get/instance_manager.dart';
+import 'package:get/get.dart';
 
 import '../../../common/appbar/common_appbar.dart';
 import '../../../common/widgets/buddy_request_card.dart';
 import '../../../common/widgets/no_data_illustrations.dart';
 import '../profile/buddy_profile_screen.dart';
+import 'package:fitbud/utils/enums.dart';
+
+import 'controller/buddy_controller.dart';
 
 class AllBuddyRequestsScreen extends StatefulWidget {
   const AllBuddyRequestsScreen({super.key});
@@ -19,63 +20,17 @@ class AllBuddyRequestsScreen extends StatefulWidget {
 class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
   String _selectedFilter = 'Pending';
 
-  // Remove the comment to test the ui for no data
-  // final List<Map<String, String>> _pendingRequests = [];
-  // final List<Map<String, String>> _acceptedRequests = [];
-  // final List<Map<String, String>> _rejectedRequests = [];
+  BuddyController get buddyC => Get.find<BuddyController>();
 
-  // Dummy data for Buddy Requests
-  final List<Map<String, String>> _pendingRequests = List.generate(
-    5,
-    (index) => {
-      'name': 'Alice $index',
-      'gender': 'Female',
-      'age': '${20 + index}',
-      'interest': 'Yoga',
-      'location': 'City ${index + 1}',
-      'time': '${index + 1}h ago',
-      'avatar': 'assets/images/buddy.jpg',
-      'status': 'pending',
-    },
-  );
-
-  final List<Map<String, String>> _acceptedRequests = List.generate(
-    3,
-    (index) => {
-      'name': 'Bob $index',
-      'gender': 'Male',
-      'age': '${25 + index}',
-      'interest': 'Gym',
-      'location': 'City ${index + 5}',
-      'time': '${index + 2}h ago',
-      'avatar': 'assets/images/buddy.jpg',
-      'status': 'accepted',
-    },
-  );
-
-  final List<Map<String, String>> _rejectedRequests = List.generate(
-    2,
-    (index) => {
-      'name': 'Charlie $index',
-      'gender': 'Male',
-      'age': '${22 + index}',
-      'interest': 'Running',
-      'location': 'City ${index + 8}',
-      'time': '${index + 3}h ago',
-      'avatar': 'assets/images/buddy.jpg',
-      'status': 'rejected',
-    },
-  );
-
-  List<Map<String, String>> get _currentList {
+  List<BuddyRequestVM> _filter(List<BuddyRequestVM> list) {
     switch (_selectedFilter) {
       case 'Accepted':
-        return _acceptedRequests;
+        return list.where((e) => e.req.status.name == 'accepted').toList();
       case 'Rejected':
-        return _rejectedRequests;
+        return list.where((e) => e.req.status.name == 'rejected').toList();
       case 'Pending':
       default:
-        return _pendingRequests;
+        return list.where((e) => e.req.status.name == 'pending').toList();
     }
   }
 
@@ -88,7 +43,6 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             children: [
-              // Filter Chips
               Row(
                 children: [
                   _buildFilterChip('Pending'),
@@ -99,41 +53,62 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              // Buddy Requests List
+
               Expanded(
-                child: _currentList.isEmpty
-                    ? const NoDataIllustration(
-                        imagePath: 'assets/images/no-requests.png',
-                        message: 'No Requests Found',
-                      )
-                    : ListView.builder(
-                        itemCount: _currentList.length,
-                        itemBuilder: (context, index) {
-                          final buddy = _currentList[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: BuddyRequestCard(
-                              name: buddy['name']!,
-                              gender: buddy['gender']!,
-                              age: buddy['age']!,
-                              interest: buddy['interest']!,
-                              location: buddy['location']!,
-                              time: buddy['time']!,
-                              avatar: buddy['avatar']!,
-                              status: buddy['status']!,
-                              onAccept: () {},
-                              onReject: () {},
-                              onCardTap: () {
-                                Get.to(
+                child: Obx(() {
+                  // show incoming requests (received by me)
+                  final incoming = _filter(buddyC.incoming);
+
+                  if (incoming.isEmpty) {
+                    return const NoDataIllustration(
+                      imagePath: 'assets/images/no-requests.png',
+                      message: 'No Requests Found',
+                    );
+                  }
+
+                  return ListView.builder(
+                    itemCount: incoming.length,
+                    itemBuilder: (context, index) {
+                      final item = incoming[index];
+                      final u = item.other;
+
+                      final busy = buddyC.busyRequestIds.contains(item.req.id);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: BuddyRequestCard(
+                          name: (u.displayName ?? 'User'),
+                          gender: (u.gender ?? ''),
+                          age: _ageFromDob(u.dob)?.toString() ?? '',
+                          interest: (u.favouriteActivity ?? ''),
+                          location: (u.city ?? ''),
+                          time: _timeAgo(item.req.createdAt),
+                          avatar: (u.photoUrl?.isNotEmpty == true)
+                              ? u.photoUrl!
+                              : 'assets/images/buddy.jpg',
+                          status: item.req.status.name, // pending/accepted/rejected
+                          onAccept: () {
+                            if (busy) return;
+                            buddyC.acceptRequest(item.req.id);
+                          },
+                          onReject: () {
+                            if (busy) return;
+                            buddyC.rejectRequest(item.req.id);
+                          },
+
+                          onCardTap: () {
+                            Get.to(
                                   () => BuddyProfileScreen(
-                                    scenario: BuddyScenario.requestReceived,
-                                  ),
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
+                                scenario: BuddyScenario.requestReceived,
+                                buddyId: u.id,
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  );
+                }),
               ),
             ],
           ),
@@ -145,7 +120,6 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
   Widget _buildFilterChip(String label) {
     final bool isSelected = _selectedFilter == label;
     Color bgColor;
-    Color textColor = Colors.white;
 
     switch (label) {
       case 'Pending':
@@ -154,12 +128,12 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
             : Colors.deepOrange.withOpacity(0.2);
         break;
       case 'Accepted':
-        bgColor = isSelected
-            ? XColors.primary
-            : XColors.primary.withOpacity(0.2);
+        bgColor =
+        isSelected ? XColors.primary : XColors.primary.withOpacity(0.2);
         break;
       case 'Rejected':
-        bgColor = isSelected ? XColors.danger : XColors.danger.withOpacity(0.2);
+        bgColor =
+        isSelected ? XColors.danger : XColors.danger.withOpacity(0.2);
         break;
       default:
         bgColor = XColors.bodyText;
@@ -167,9 +141,7 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () {
-          setState(() => _selectedFilter = label);
-        },
+        onTap: () => setState(() => _selectedFilter = label),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           alignment: Alignment.center,
@@ -179,10 +151,28 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
           ),
           child: Text(
             label,
-            style: TextStyle(color: textColor, fontWeight: FontWeight.w500),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
           ),
         ),
       ),
     );
+  }
+
+  int? _ageFromDob(DateTime? dob) {
+    if (dob == null) return null;
+    final now = DateTime.now();
+    var age = now.year - dob.year;
+    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  String _timeAgo(DateTime? dt) {
+    if (dt == null) return '';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }

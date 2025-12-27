@@ -1,10 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../domain/models/buddies/buddy_request.dart';
-import '../../../domain/models/buddies/friendship.dart';
-import '../../../domain/models/chat/conversation.dart';
-import '../../../domain/models/chat/conversation_participant.dart';
 import '../../models/auth/app_user.dart';
+import '../../models/buddies/buddy_request.dart';
+import '../../models/buddies/friendship.dart';
 import '../firestore_paths.dart';
 import '../firestore_repo_base.dart';
 import '../repo_exceptions.dart';
@@ -19,7 +17,9 @@ class BuddyRepo extends RepoBase {
     return u.uid;
   }
 
-  // ---------- Buddy Requests ----------
+  // -----------------------------
+  // Buddy Requests
+  // -----------------------------
 
   Stream<List<BuddyRequest>> watchIncomingRequests() {
     final uid = _uid();
@@ -44,9 +44,11 @@ class BuddyRepo extends RepoBase {
     String message = '',
   }) async {
     final uid = _uid();
-    if (toUserId == uid) throw ValidationException('Cannot send request to yourself');
+    if (toUserId == uid) {
+      throw ValidationException('Cannot send request to yourself');
+    }
 
-    // Optional: prevent duplicates (best-effort)
+    // prevent duplicate pending requests
     final existing = await col(FirestorePaths.buddyRequests)
         .where('fromUserId', isEqualTo: uid)
         .where('toUserId', isEqualTo: toUserId)
@@ -71,109 +73,23 @@ class BuddyRepo extends RepoBase {
   Future<void> cancelBuddyRequest(String requestId) async {
     final uid = _uid();
     final ref = doc('${FirestorePaths.buddyRequests}/$requestId');
+
     await db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       if (!snap.exists) throw NotFoundException('Request not found');
       final d = snap.data()!;
-      if (d['fromUserId'] != uid) throw PermissionException('Only sender can cancel');
-      final status = d['status'] as String? ?? 'pending';
+
+      if (d['fromUserId'] != uid) {
+        throw PermissionException('Only sender can cancel');
+      }
+
+      final status = (d['status'] as String?) ?? BuddyRequestStatus.pending.name;
       if (status != BuddyRequestStatus.pending.name) return;
+
       tx.update(ref, {
         'status': BuddyRequestStatus.cancelled.name,
         'respondedAt': FieldValue.serverTimestamp(),
       });
-    });
-  }
-
-  /// Accept incoming request:
-  /// 1) mark request accepted
-  /// 2) create Friendship doc
-  /// 3) create or ensure direct Conversation
-  Future<String> acceptBuddyRequest({
-    required String requestId,
-    bool createDirectChat = true,
-  }) async {
-    final uid = _uid();
-    final reqRef = doc('${FirestorePaths.buddyRequests}/$requestId');
-
-    return db.runTransaction<String>((tx) async {
-      final reqSnap = await tx.get(reqRef);
-      if (!reqSnap.exists) throw NotFoundException('Request not found');
-      final d = reqSnap.data()!;
-      final toUserId = d['toUserId'] as String? ?? '';
-      final fromUserId = d['fromUserId'] as String? ?? '';
-      final status = d['status'] as String? ?? BuddyRequestStatus.pending.name;
-
-      if (toUserId != uid) throw PermissionException('Only receiver can accept');
-      if (status != BuddyRequestStatus.pending.name) {
-        // already handled
-        return '';
-      }
-
-      // Update request
-      tx.update(reqRef, {
-        'status': BuddyRequestStatus.accepted.name,
-        'respondedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Create friendship with deterministic id (sorted ids)
-      final a = [fromUserId, toUserId]..sort();
-      final friendshipId = '${a[0]}_${a[1]}';
-      final fRef = doc('${FirestorePaths.friendships}/$friendshipId');
-      final fSnap = await tx.get(fRef);
-      if (!fSnap.exists) {
-        tx.set(fRef, {
-          'userAId': a[0],
-          'userBId': a[1],
-          'createdAt': FieldValue.serverTimestamp(),
-          'isBlocked': false,
-          'blockedByUserId': '',
-        });
-      }
-
-      if (!createDirectChat) return '';
-
-      // Create a deterministic direct conversation id too (optional)
-      final convId = 'direct_${a[0]}_${a[1]}';
-      final cRef = doc('${FirestorePaths.conversations}/$convId');
-      final cSnap = await tx.get(cRef);
-      if (!cSnap.exists) {
-        tx.set(cRef, Conversation(
-          id: convId,
-          type: ConversationType.direct,
-          title: '',
-          groupId: '',
-          createdByUserId: uid,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ).toMap()..addAll({
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-          'lastMessageId': '',
-          'lastMessagePreview': '',
-          'lastMessageAt': null,
-        }));
-
-        // participants
-        final p1 = doc('${FirestorePaths.conversationParticipants(convId)}/${a[0]}');
-        final p2 = doc('${FirestorePaths.conversationParticipants(convId)}/${a[1]}');
-
-        tx.set(p1, ConversationParticipant(
-          id: a[0],
-          conversationId: convId,
-          userId: a[0],
-          joinedAt: DateTime.now(),
-        ).toMap()..addAll({'joinedAt': FieldValue.serverTimestamp()}));
-
-        tx.set(p2, ConversationParticipant(
-          id: a[1],
-          conversationId: convId,
-          userId: a[1],
-          joinedAt: DateTime.now(),
-        ).toMap()..addAll({'joinedAt': FieldValue.serverTimestamp()}));
-      }
-
-      return convId;
     });
   }
 
@@ -185,8 +101,12 @@ class BuddyRepo extends RepoBase {
       final snap = await tx.get(ref);
       if (!snap.exists) throw NotFoundException('Request not found');
       final d = snap.data()!;
-      if (d['toUserId'] != uid) throw PermissionException('Only receiver can decline');
-      final status = d['status'] as String? ?? 'pending';
+
+      if (d['toUserId'] != uid) {
+        throw PermissionException('Only receiver can decline');
+      }
+
+      final status = (d['status'] as String?) ?? BuddyRequestStatus.pending.name;
       if (status != BuddyRequestStatus.pending.name) return;
 
       tx.update(ref, {
@@ -196,32 +116,79 @@ class BuddyRepo extends RepoBase {
     });
   }
 
-  // ---------- Friendships ----------
+  /// Accept request:
+  /// - mark request accepted
+  /// - create friendship doc (with userIds array)
+  Future<void> acceptBuddyRequest({required String requestId}) async {
+    final uid = _uid();
+    final reqRef = doc('${FirestorePaths.buddyRequests}/$requestId');
 
-  Stream<List<Friendship>> watchMyFriendships() {
+    await db.runTransaction((tx) async {
+      final reqSnap = await tx.get(reqRef);
+      if (!reqSnap.exists) throw NotFoundException('Request not found');
+
+      final d = reqSnap.data()!;
+      final toUserId = (d['toUserId'] as String?) ?? '';
+      final fromUserId = (d['fromUserId'] as String?) ?? '';
+      final status = (d['status'] as String?) ?? BuddyRequestStatus.pending.name;
+
+      if (toUserId != uid) throw PermissionException('Only receiver can accept');
+      if (status != BuddyRequestStatus.pending.name) return;
+
+      // 1) Update request
+      tx.update(reqRef, {
+        'status': BuddyRequestStatus.accepted.name,
+        'respondedAt': FieldValue.serverTimestamp(),
+      });
+
+      // 2) Create friendship (deterministic ID)
+      final ids = [fromUserId, toUserId]..sort();
+      final friendshipId = '${ids[0]}_${ids[1]}';
+      final fRef = doc('${FirestorePaths.friendships}/$friendshipId');
+
+      final fSnap = await tx.get(fRef);
+      if (!fSnap.exists) {
+        tx.set(fRef, {
+          'userAId': ids[0],
+          'userBId': ids[1],
+          'userIds': ids, // IMPORTANT
+          'createdAt': FieldValue.serverTimestamp(),
+          'isBlocked': false,
+          'blockedByUserId': '',
+        });
+      }
+    });
+  }
+
+  // -----------------------------
+  // Friendships
+  // -----------------------------
+
+  Stream<List<Friendship>> watchMyFriendships({int limit = 200}) {
     final uid = _uid();
     return col(FirestorePaths.friendships)
         .where('userIds', arrayContains: uid)
+        .limit(limit)
         .snapshots()
         .map((q) => q.docs.map(Friendship.fromDoc).toList());
   }
 
-  /// Stream list of actual buddies users (AppUser)
+  /// Get list of buddies as AppUser
   Stream<List<AppUser>> watchMyBuddiesUsers({int limit = 200}) {
     final uid = _uid();
-    return watchMyFriendships().asyncMap((items) async {
+    return watchMyFriendships(limit: limit).asyncMap((items) async {
       final otherIds = <String>{};
 
       for (final f in items) {
         if (f.isBlocked) continue;
+
+        // support both new docs (userIds) and old docs
         if (f.userAId == uid) {
           otherIds.add(f.userBId);
         } else if (f.userBId == uid) {
           otherIds.add(f.userAId);
         } else {
-          // Defensive: if old docs had unsorted ids
-          otherIds.add(f.userAId);
-          otherIds.add(f.userBId);
+          otherIds.addAll(f.userIds);
           otherIds.remove(uid);
         }
       }
@@ -229,69 +196,114 @@ class BuddyRepo extends RepoBase {
       final ids = otherIds.toList();
       if (ids.isEmpty) return <AppUser>[];
 
-      // Firestore whereIn max 10 -> chunk
       final out = <AppUser>[];
       for (var i = 0; i < ids.length; i += 10) {
         final chunk = ids.sublist(i, (i + 10).clamp(0, ids.length));
-        // You already have repos.authRepo.getUser(id), but that is one-by-one.
-        // If you have a users collection, batch fetch is better:
-        final snap = await db.collection(FirestorePaths.users).where(FieldPath.documentId, whereIn: chunk).get();
+        final snap = await db
+            .collection(FirestorePaths.users)
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
         out.addAll(snap.docs.map((d) => AppUser.fromDoc(d)));
       }
 
-      // Sort by display name for UI
       out.sort((a, b) => (a.displayName ?? '').compareTo(b.displayName ?? ''));
       return out;
     });
   }
 
-  /// Shows "recent buddies" if possible; otherwise falls back to "past buddies"
-  /// (any friendships where userIds contains uid).
-  ///
-  /// Recent = orderBy(createdAt desc) if field exists.
-  /// Fallback = no orderBy (works even if some docs are missing createdAt).
-  /// Step 1: RECENT buddies (ordered)
-  Stream<List<AppUser>> watchRecentBuddies({int limit = 10}) {
+  // -----------------------------
+  // Users discovery helpers
+  // -----------------------------
+
+  /// Loads candidates from users collection and filters client-side.
+  /// This is practical because Firestore cannot do "id != uid" cleanly.
+  Future<List<AppUser>> loadDiscoverUsers({
+    int limit = 30,
+    String? activity, // optional filter: activities contains activity
+    String? city,     // optional filter: city == city
+  }) async {
     final uid = _uid();
 
-    return col(FirestorePaths.friendships)
-        .where('userIds', arrayContains: uid)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .asyncMap((snap) => _friendshipsToUsers(uid, snap.docs));
+    Query<Map<String, dynamic>> q =
+    db.collection(FirestorePaths.users).where('isActive', isEqualTo: true);
+
+    if (city != null && city.trim().isNotEmpty) {
+      q = q.where('city', isEqualTo: city.trim());
+    }
+
+    if (activity != null && activity.trim().isNotEmpty) {
+      q = q.where('activities', arrayContains: activity.trim());
+    }
+
+    // read extra because we will remove current user client-side
+    final snap = await q.limit(limit + 10).get();
+
+    final users = snap.docs.map((d) => AppUser.fromDoc(d)).toList();
+    users.removeWhere((u) => u.id == uid);
+
+    // keep only first limit
+    return users.take(limit).toList();
   }
 
-  /// Step 2: FALLBACK buddies (no orderBy)
+  /// Batch load user docs for request lists
+  Future<Map<String, AppUser>> loadUsersMapByIds(List<String> ids) async {
+    final map = <String, AppUser>{};
+    if (ids.isEmpty) return map;
+
+    for (var i = 0; i < ids.length; i += 10) {
+      final chunk = ids.sublist(i, (i + 10).clamp(0, ids.length));
+      final snap = await db
+          .collection(FirestorePaths.users)
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+
+      for (final d in snap.docs) {
+        final u = AppUser.fromDoc(d);
+        map[u.id] = u;
+      }
+    }
+
+    return map;
+  }
+  /// ---------------------------------------------------------------------------
+  /// One-time fallback loader (Future) for buddies
+  /// Used by Profile tab when Stream has no recent data
+  /// ---------------------------------------------------------------------------
   Future<List<AppUser>> loadAnyBuddies({int limit = 10}) async {
     final uid = _uid();
 
+    // Load friendships (no ordering – safe fallback)
     final snap = await col(FirestorePaths.friendships)
         .where('userIds', arrayContains: uid)
         .limit(limit)
         .get();
 
-    return _friendshipsToUsers(uid, snap.docs);
-  }
+    if (snap.docs.isEmpty) return [];
 
-  Future<List<AppUser>> _friendshipsToUsers(
-      String uid,
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-      ) async {
-    if (docs.isEmpty) return [];
+    final friendships = snap.docs.map(Friendship.fromDoc).toList();
 
-    final friendships = docs.map(Friendship.fromDoc).toList();
-    final otherIds = friendships
-        .map((f) => f.userAId == uid ? f.userBId : f.userAId)
-        .toList();
+    // Collect other user IDs
+    final otherUserIds = <String>[];
+    for (final f in friendships) {
+      if (f.isBlocked) continue;
+
+      if (f.userAId == uid) {
+        otherUserIds.add(f.userBId);
+      } else if (f.userBId == uid) {
+        otherUserIds.add(f.userAId);
+      }
+    }
+
+    if (otherUserIds.isEmpty) return [];
+
+    // Firestore whereIn supports max 10
+    final ids = otherUserIds.take(10).toList();
 
     final usersSnap = await col(FirestorePaths.users)
-        .where(FieldPath.documentId, whereIn: otherIds)
+        .where(FieldPath.documentId, whereIn: ids)
         .get();
 
-    final users = usersSnap.docs.map(AppUser.fromDoc).toList();
-    final map = {for (final u in users) u.id: u};
-
-    return otherIds.map((id) => map[id]).whereType<AppUser>().toList();
+    return usersSnap.docs.map(AppUser.fromDoc).toList();
   }
+
 }

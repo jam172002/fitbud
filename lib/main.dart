@@ -1,3 +1,4 @@
+import 'package:fitbud/presentation/screens/budy/controller/buddy_controller.dart';
 import 'package:fitbud/presentation/screens/gyms/controllers/gyms_user_controller.dart';
 import 'package:fitbud/presentation/screens/home/home_controller.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ Future<void> main() async {
   final repos = Repos();
   Get.put<Repos>(repos, permanent: true);
   Get.put(HomeController());
+  Get.put(BuddyController(Get.find<Repos>()), permanent: true);
 
   // Controllers (depend on repos)
   Get.put<GymsUserController>(
