@@ -5,6 +5,8 @@ class Activity {
   final String name;
   final int order;
   final bool isActive;
+  final String iconUrl;
+  final String imageUrl;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -13,6 +15,8 @@ class Activity {
     required this.name,
     required this.order,
     required this.isActive,
+    this.iconUrl = '',
+    this.imageUrl = '',
     this.createdAt,
     this.updatedAt,
   });
@@ -27,6 +31,8 @@ class Activity {
       name: data['name'] as String,
       order: (data['order'] ?? 0) as int,
       isActive: (data['isActive'] ?? true) as bool,
+      iconUrl: (data['iconUrl'] ?? '') as String,
+      imageUrl: (data['imageUrl'] ?? '') as String,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );

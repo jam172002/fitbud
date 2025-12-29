@@ -134,34 +134,69 @@ class _HomeScreenState extends State<HomeScreen> {
               controller: _scrollController,
               child: Column(
                 children: [
-                  // ---------------- Categories ----------------
+// ---------------- Categories ----------------
                   SizedBox(
                     height: 100,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: 10,
-                      separatorBuilder: (_, __) => const SizedBox(width: 16),
-                      itemBuilder: (context, index) {
-                        // For now, keep static category
-                        const activity = 'Badminton';
+                    child: Obx(() {
+                      if (home.loadingActivities.value) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                        return CategoryHomeIcon(
-                          iconPath: 'assets/icons/badminton.png',
-                          title: activity,
-                          onTap: () {
-                            checkPremiumAndProceed(() {
-                              Get.to(
-                                    () => const SpecificCatagoryBuddiesMatchScreen(
-                                  activity: activity,
+                      if (home.errActivities.value.isNotEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  home.errActivities.value,
+                                  style: TextStyle(
+                                    color: XColors.bodyText.withValues(alpha: 0.7),
+                                    fontSize: 11,
+                                  ),
                                 ),
-                              );
-                            });
-                          },
+                              ),
+                              const SizedBox(width: 10),
+                              OutlinedButton(
+                                onPressed: home.fetchActivities,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
                         );
-                      },
-                    ),
+                      }
+
+                      final cats = home.activities;
+                      if (cats.isEmpty) {
+                        return const Center(
+                          child: Text('No categories found'),
+                        );
+                      }
+
+                      return ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: cats.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 16),
+                        itemBuilder: (context, index) {
+                          final a = cats[index];
+
+                          return CategoryHomeIcon(
+                            // IMPORTANT:
+                            // Update CategoryHomeIcon to support network iconUrl (see next section)
+                            iconPath: a.iconUrl.isNotEmpty ? a.iconUrl : 'assets/icons/badminton.png',
+                            title: a.name,
+                            onTap: () {
+                              checkPremiumAndProceed(() {
+                                Get.to(() => SpecificCatagoryBuddiesMatchScreen(activity: a.name));
+                              });
+                            },
+                          );
+                        },
+                      );
+                    }),
                   ),
+
 
                   // ---------------- Products/Banners ----------------
                   const SizedBox(height: 6),
@@ -183,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             Text(
                               home.errProducts.value,
                               style: TextStyle(
-                                color: XColors.bodyText.withOpacity(0.7),
+                                color: XColors.bodyText.withValues(alpha: 0.7),
                                 fontSize: 11,
                               ),
                             ),
@@ -256,7 +291,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             Text(
                               home.errInvites.value,
                               style: TextStyle(
-                                color: XColors.bodyText.withOpacity(0.7),
+                                color: XColors.bodyText.withValues(alpha: 0.7),
                                 fontSize: 11,
                               ),
                             ),
@@ -354,7 +389,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               Text(
                                 planController.error.value,
                                 style: TextStyle(
-                                  color: XColors.bodyText.withOpacity(0.7),
+                                  color: XColors.bodyText.withValues(alpha: 0.7),
                                   fontSize: 11,
                                 ),
                               ),
@@ -416,7 +451,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 duration: const Duration(milliseconds: 200),
                 opacity: _isFabVisible ? 1 : 0,
                 child: FloatingActionButton(
-                  backgroundColor: XColors.primary.withOpacity(0.7),
+                  backgroundColor: XColors.primary.withValues(alpha: 0.7),
                   elevation: 0,
                   shape: const CircleBorder(),
                   onPressed: () {

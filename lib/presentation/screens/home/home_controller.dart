@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 
+import '../../../domain/models/activities/activity.dart';
 import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/models/product/product.dart';
 import '../../../domain/models/sessions/session_invite.dart';
@@ -37,6 +38,31 @@ class HomeController extends GetxController {
   StreamSubscription? _meSub;
   StreamSubscription? _prodSub;
   StreamSubscription? _invSub;
+  final RxList<Activity> activities = <Activity>[].obs;
+  final RxBool loadingActivities = false.obs;
+  final RxString errActivities = ''.obs;
+
+
+  Future<void> fetchActivities() async {
+    loadingActivities.value = true;
+    errActivities.value = '';
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('activities')
+          .where('isActive', isEqualTo: true)
+          .orderBy('order')
+          .limit(50)
+          .get();
+
+      activities.assignAll(
+        snap.docs.map((d) => Activity.fromDoc(d)).toList(),
+      );
+    } catch (e) {
+      errActivities.value = e.toString();
+    } finally {
+      loadingActivities.value = false;
+    }
+  }
 
   @override
   void onInit() {
@@ -44,6 +70,7 @@ class HomeController extends GetxController {
     _listenMe();
     _listenProducts();
     _listenInvites();
+    fetchActivities();
   }
 
   void _listenMe() {

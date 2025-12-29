@@ -1,8 +1,7 @@
-import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 
 class CategoryHomeIcon extends StatelessWidget {
-  final String iconPath;
+  final String iconPath; // can be url OR asset
   final String title;
   final VoidCallback onTap;
 
@@ -13,36 +12,44 @@ class CategoryHomeIcon extends StatelessWidget {
     required this.onTap,
   });
 
+  bool get _isNetwork =>
+      iconPath.startsWith('http://') || iconPath.startsWith('https://');
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          //? icon
           Container(
-            height: 60,
-            width: 60,
-            padding: const EdgeInsets.all(18),
+            height: 54,
+            width: 54,
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: XColors.primaryText.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(14),
+              color: Colors.white.withValues(alpha:  0.08),
             ),
-            child: ColorFiltered(
-              colorFilter: ColorFilter.mode(
-                XColors.primary.withOpacity(0.95),
-                BlendMode.srcATop,
-              ),
-              child: Image.asset(iconPath),
-            ),
+            child: _isNetwork
+                ? Image.network(
+              iconPath,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  Image.asset('assets/icons/badminton.png'),
+            )
+                : Image.asset(iconPath, fit: BoxFit.contain),
           ),
-
           const SizedBox(height: 8),
-
-          //? Text
-          Text(
-            title,
-            style: const TextStyle(color: XColors.bodyText, fontSize: 11),
+          SizedBox(
+            width: 72,
+            child: Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11),
+            ),
           ),
         ],
       ),
