@@ -37,14 +37,14 @@ class _SpecificCatagoryBuddiesMatchScreenState
     return Scaffold(
       appBar: XAppBar(title: widget.activity),
       body: SafeArea(
-        child: FutureBuilder(
+        child: FutureBuilder<List<dynamic>>(
           future: _future,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final users = (snap.data as List?) ?? [];
+            final users = snap.data ?? [];
             if (users.isEmpty) {
               return const Center(child: Text('No buddies found'));
             }
@@ -55,7 +55,10 @@ class _SpecificCatagoryBuddiesMatchScreenState
               separatorBuilder: (_, __) => const SizedBox(height: 16),
               itemBuilder: (context, index) {
                 final u = users[index];
-                final invited = buddyC.busyUserIds.contains(u.id);
+
+                // assuming u has id/photoUrl/displayName/city/gender/dob like AppUser
+                final String buddyUserId = (u.id ?? '').toString();
+                final bool invited = buddyC.busyUserIds.contains(buddyUserId);
 
                 return SpecificBuddyMatchCard(
                   avatar: (u.photoUrl?.isNotEmpty == true)
@@ -66,26 +69,36 @@ class _SpecificCatagoryBuddiesMatchScreenState
                   gender: (u.gender ?? ''),
                   age: _ageFromDob(u.dob)?.toString() ?? '',
                   isInvited: invited,
-                  onInvite: () async {
-                    await buddyC.inviteUser(u.id);
 
-                    Get.dialog(
-                      SimpleDialogWidget(
-                        message:
-                        "An invitation has been sent to the user to join as your buddy",
-                        icon: LucideIcons.circle_check,
-                        iconColor: XColors.primary,
-                        buttonText: "Ok",
-                        onOk: () {},
-                      ),
-                    );
+                  // IMPORTANT:
+                  // 1) Do NOT pass null (if onInvite is non-nullable)
+                  // 2) Do NOT use async if onInvite expects VoidCallback
+                  onInvite: () {
+                    if (invited) return;
+                    if (buddyUserId.isEmpty) return;
+
+                    buddyC.inviteUser(buddyUserId).then((_) {
+                      Get.dialog(
+                        SimpleDialogWidget(
+                          message:
+                          "An invitation has been sent to the user to join as your buddy",
+                          icon: LucideIcons.circle_check,
+                          iconColor: XColors.primary,
+                          buttonText: "Ok",
+                          onOk: () => Get.back(),
+                        ),
+                      );
+                    });
                   },
+
                   onCardTap: () {
+                    if (buddyUserId.isEmpty) return;
+
                     Get.to(
                           () => BuddyProfileScreen(
-                            scenario: BuddyScenario.notBuddy,
-                            buddyId: u.id,
-                          ),
+                        buddyUserId: buddyUserId,
+                        scenario: BuddyScenario.notBuddy,
+                      ),
                     );
                   },
                 );

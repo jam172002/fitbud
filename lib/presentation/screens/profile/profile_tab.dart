@@ -24,18 +24,8 @@ class ProfileScreen extends StatelessWidget {
   final Repos repos = Get.find<Repos>();
 
   void checkPremiumAndProceed(VoidCallback onAllowed) {
-    /*if (planController.hasPremium) {
-      onAllowed();
-    } else {
-      Get.dialog(
-        SimpleDialogWidget(
-          message: "Please purchase a premium plan to access Buddy Requests.",
-          icon: Icons.lock_outline,
-          iconColor: XColors.primary,
-          buttonText: "Ok",
-        ),
-      );
-    }*/
+    // premium gate currently disabled in your code
+    onAllowed();
   }
 
   ImageProvider _avatarProvider(String? url) {
@@ -78,8 +68,8 @@ class ProfileScreen extends StatelessWidget {
                         color: Colors.transparent,
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Row(
-                        children: const [
+                      child: const Row(
+                        children: [
                           CircleAvatar(
                             radius: 28,
                             backgroundImage: AssetImage('assets/images/buddy.jpg'),
@@ -101,7 +91,9 @@ class ProfileScreen extends StatelessWidget {
                   );
                 }
 
-                final name = (me.displayName ?? '').trim().isEmpty ? 'User' : (me.displayName ?? '');
+                final name = (me.displayName ?? '').trim().isEmpty
+                    ? 'User'
+                    : (me.displayName ?? '');
                 final email = (me.email ?? '').trim();
 
                 return GestureDetector(
@@ -134,7 +126,10 @@ class ProfileScreen extends StatelessWidget {
                               const SizedBox(height: 4),
                               Text(
                                 email.isEmpty ? ' ' : email,
-                                style: const TextStyle(fontSize: 13, color: Colors.grey),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ],
                           ),
@@ -181,13 +176,10 @@ class ProfileScreen extends StatelessWidget {
                     if (fb.connectionState == ConnectionState.waiting) {
                       return const SizedBox(height: 70);
                     }
-
                     final buddies = fb.data ?? [];
-
                     if (buddies.isEmpty) {
                       return const _ClosedEmptyState();
                     }
-
                     return _BuddiesRow(
                       buddies: buddies,
                       avatarProvider: _avatarProvider,
@@ -206,22 +198,22 @@ class ProfileScreen extends StatelessWidget {
               subtitle: 'Checkout the requests you received',
               onTap: () {
                 checkPremiumAndProceed(() {
-                  Get.to(() => AllBuddyRequestsScreen());
+                  Get.to(() => const AllBuddyRequestsScreen());
                 });
               },
             ),
-
             const SizedBox(height: 12),
+
             _ProfileTile(
               icon: LucideIcons.calendar_arrow_down,
               title: 'Session Invites',
               subtitle: 'See all the session invites',
               onTap: () {
-                Get.to(() => AllSessionInvitesScreen());
+                Get.to(() => const AllSessionInvitesScreen());
               },
             ),
-
             const SizedBox(height: 12),
+
             _ProfileTile(
               icon: LucideIcons.dollar_sign,
               title: 'Transactions',
@@ -230,18 +222,18 @@ class ProfileScreen extends StatelessWidget {
                 Get.to(() => TransactionsScreen());
               },
             ),
-
             const SizedBox(height: 12),
+
             _ProfileTile(
               icon: LucideIcons.award,
               title: 'Subscriptions & Plans',
               subtitle: 'View all the premium plans',
               onTap: () {
-                Get.to(() => PremiumPlanScreen());
+                Get.to(() => const PremiumPlanScreen());
               },
             ),
-
             const SizedBox(height: 12),
+
             _ProfileTile(
               icon: LucideIcons.bolt,
               title: 'Settings',
@@ -277,14 +269,18 @@ class _BuddiesRow extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final u = buddies[index];
-          final name = (u.displayName ?? '').trim().isEmpty ? 'Buddy' : (u.displayName ?? '');
+          final name =
+          (u.displayName ?? '').trim().isEmpty ? 'Buddy' : (u.displayName ?? '');
 
           return GestureDetector(
             onTap: () {
+              final buddyUserId = (u.id).toString();
+              if (buddyUserId.isEmpty) return;
+
               Get.to(
                     () => BuddyProfileScreen(
+                  buddyUserId: buddyUserId,
                   scenario: BuddyScenario.existingBuddy,
-                  buddyId: u.id,
                 ),
               );
             },
@@ -329,8 +325,8 @@ class _ClosedEmptyState extends StatelessWidget {
         color: XColors.secondaryBG.withOpacity(0.4),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
-        children: const [
+      child: const Row(
+        children: [
           Icon(Iconsax.user_add, color: XColors.primary),
           SizedBox(width: 10),
           Expanded(

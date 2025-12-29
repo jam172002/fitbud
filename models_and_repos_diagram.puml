@@ -1,0 +1,730 @@
+@startuml Fitbud Models and Repositories
+
+!define MODEL_COLOR #E1F5FF
+!define REPO_COLOR #FFF4E1
+!define BASE_COLOR #E8F5E9
+
+package "Models" {
+  
+  abstract class FirestoreModel <<abstract>> BASE_COLOR {
+    {abstract} +String id
+    {abstract} +Map<String, dynamic> toMap()
+    {static} +Timestamp? ts(DateTime? dt)
+    {static} +DateTime? dt(Timestamp? ts)
+    {static} +DateTime? readDate(dynamic v)
+    {static} +int readInt(dynamic v)
+    {static} +double readDouble(dynamic v)
+    {static} +bool readBool(dynamic v)
+    {static} +String readString(dynamic v)
+    {static} +List<String> readStringList(dynamic v)
+    {static} +Map<String, dynamic> readMap(dynamic v)
+  }
+
+  class AppUser MODEL_COLOR {
+    +String id
+    +String? displayName
+    +String? email
+    +String? phone
+    +String? photoUrl
+    +bool isPremium
+    +DateTime? premiumUntil
+    +String? activePlanId
+    +String? activeSubscriptionId
+    +List<String>? activities
+    +String? favouriteActivity
+    +bool? hasGym
+    +String? gymName
+    +String? about
+    +bool? isProfileComplete
+    +String? city
+    +String? gender
+    +DateTime? dob
+    +bool? isActive
+    +DateTime? createdAt
+    +DateTime? updatedAt
+    +bool hasPremiumAccess
+    +AppUser fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+    +AppUser copyWith(...)
+  }
+
+  class UserSettings MODEL_COLOR {
+    +String id
+    +bool pushEnabled
+    +bool showOnlineStatus
+    +bool showLastSeen
+    +bool allowBuddyRequests
+    +bool allowGroupInvites
+    +String language
+    +String themeMode
+    +DateTime? updatedAt
+    +UserSettings fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  UserSettings ..|> FirestoreModel
+
+  class DeviceToken MODEL_COLOR {
+    +String id
+    +String platform
+    +String token
+    +DateTime? createdAt
+    +DateTime? lastSeenAt
+    +DeviceToken fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  DeviceToken ..|> FirestoreModel
+
+  class BuddyRequest MODEL_COLOR {
+    +String id
+    +String fromUserId
+    +String toUserId
+    +BuddyRequestStatus status
+    +String message
+    +DateTime? createdAt
+    +DateTime? respondedAt
+    +BuddyRequest fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  BuddyRequest ..|> FirestoreModel
+  BuddyRequest "from" --> AppUser : fromUserId
+  BuddyRequest "to" --> AppUser : toUserId
+
+  enum BuddyRequestStatus {
+    pending
+    accepted
+    rejected
+    cancelled
+    blocked
+  }
+  BuddyRequest --> BuddyRequestStatus
+
+  class Friendship MODEL_COLOR {
+    +String id
+    +String userAId
+    +String userBId
+    +List<String> userIds
+    +DateTime? createdAt
+    +bool isBlocked
+    +String blockedByUserId
+    +Friendship fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  Friendship ..|> FirestoreModel
+  Friendship "userA" --> AppUser : userAId
+  Friendship "userB" --> AppUser : userBId
+
+  class Group MODEL_COLOR {
+    +String id
+    +String title
+    +String photoUrl
+    +String description
+    +String createdByUserId
+    +DateTime? createdAt
+    +DateTime? updatedAt
+    +int memberCount
+    +Group fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  Group ..|> FirestoreModel
+  Group "creator" --> AppUser : createdByUserId
+
+  class GroupMember MODEL_COLOR {
+    +String id
+    +String groupId
+    +String userId
+    +GroupRole role
+    +DateTime? joinedAt
+    +bool isMuted
+    +DateTime? mutedUntil
+    +GroupMember fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  GroupMember ..|> FirestoreModel
+  GroupMember "member" --> AppUser : userId
+  GroupMember "group" --> Group : groupId
+
+  enum GroupRole {
+    owner
+    admin
+    member
+  }
+  GroupMember --> GroupRole
+
+  class GroupInvite MODEL_COLOR {
+    +String id
+    +String groupId
+    +String invitedUserId
+    +String invitedByUserId
+    +GroupInviteStatus status
+    +DateTime? createdAt
+    +DateTime? respondedAt
+    +GroupInvite fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  GroupInvite ..|> FirestoreModel
+  GroupInvite "invited" --> AppUser : invitedUserId
+  GroupInvite "inviter" --> AppUser : invitedByUserId
+  GroupInvite "group" --> Group : groupId
+
+  enum GroupInviteStatus {
+    pending
+    accepted
+    declined
+    cancelled
+  }
+  GroupInvite --> GroupInviteStatus
+
+  class Conversation MODEL_COLOR {
+    +String id
+    +ConversationType type
+    +String title
+    +String groupId
+    +String createdByUserId
+    +DateTime? createdAt
+    +DateTime? updatedAt
+    +String lastMessageId
+    +String lastMessagePreview
+    +DateTime? lastMessageAt
+    +Conversation fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  Conversation ..|> FirestoreModel
+  Conversation "creator" --> AppUser : createdByUserId
+  Conversation "group" --> Group : groupId
+
+  enum ConversationType {
+    direct
+    group
+  }
+  Conversation --> ConversationType
+
+  class ConversationParticipant MODEL_COLOR {
+    +String id
+    +String conversationId
+    +String userId
+    +DateTime? joinedAt
+    +DateTime? lastReadAt
+    +bool isMuted
+    +DateTime? mutedUntil
+    +ConversationParticipant fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  ConversationParticipant ..|> FirestoreModel
+  ConversationParticipant "participant" --> AppUser : userId
+  ConversationParticipant "conversation" --> Conversation : conversationId
+
+  class Message MODEL_COLOR {
+    +String id
+    +String conversationId
+    +String senderUserId
+    +MessageType type
+    +String text
+    +String mediaUrl
+    +String thumbnailUrl
+    +double? lat
+    +double? lng
+    +String replyToMessageId
+    +DateTime? createdAt
+    +bool isDeleted
+    +DeliveryState deliveryState
+    +Message fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  Message ..|> FirestoreModel
+  Message "sender" --> AppUser : senderUserId
+  Message "conversation" --> Conversation : conversationId
+  Message "replyTo" --> Message : replyToMessageId
+
+  enum MessageType {
+    text
+    image
+    video
+    audio
+    file
+    location
+    system
+  }
+  Message --> MessageType
+
+  enum DeliveryState {
+    sent
+    delivered
+    read
+  }
+  Message --> DeliveryState
+
+  class MessageReceipt MODEL_COLOR {
+    +String id
+    +String messageId
+    +String userId
+    +DeliveryState state
+    +DateTime? updatedAt
+    +MessageReceipt fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  MessageReceipt ..|> FirestoreModel
+  MessageReceipt "message" --> Message : messageId
+  MessageReceipt "user" --> AppUser : userId
+  MessageReceipt --> DeliveryState
+
+  class UserConversationIndex MODEL_COLOR {
+    +String id
+    +String conversationId
+    +ConversationType type
+    +String title
+    +String lastMessagePreview
+    +DateTime? lastMessageAt
+    +int unreadCount
+    +UserConversationIndex fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  UserConversationIndex ..|> FirestoreModel
+  UserConversationIndex "conversation" --> Conversation : conversationId
+  UserConversationIndex --> ConversationType
+
+  class Session MODEL_COLOR {
+    +String id
+    +SessionType type
+    +String title
+    +String description
+    +String createdByUserId
+    +DateTime? startAt
+    +DateTime? endAt
+    +GeoPoint? location
+    +String locationName
+    +String gymId
+    +SessionStatus status
+    +bool isGroupSession
+    +String groupId
+    +DateTime? createdAt
+    +DateTime? updatedAt
+    +Session fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  Session ..|> FirestoreModel
+  Session "creator" --> AppUser : createdByUserId
+  Session "gym" --> Gym : gymId
+  Session "group" --> Group : groupId
+
+  enum SessionType {
+    gym
+    game
+    other
+  }
+  Session --> SessionType
+
+  enum SessionStatus {
+    draft
+    scheduled
+    active
+    completed
+    cancelled
+  }
+  Session --> SessionStatus
+
+  class SessionParticipant MODEL_COLOR {
+    +String id
+    +String sessionId
+    +String userId
+    +bool attended
+    +DateTime? joinedAt
+    +SessionParticipant fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  SessionParticipant ..|> FirestoreModel
+  SessionParticipant "participant" --> AppUser : userId
+  SessionParticipant "session" --> Session : sessionId
+
+  class SessionInvite MODEL_COLOR {
+    +String id
+    +String sessionId
+    +String invitedUserId
+    +String invitedByUserId
+    +InviteStatus status
+    +DateTime? createdAt
+    +DateTime? respondedAt
+    +String? sessionCategory
+    +String? sessionImageUrl
+    +String? sessionLocationText
+    +DateTime? sessionDateTime
+    +String? invitedByName
+    +String? invitedByPhotoUrl
+    +SessionInvite fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  SessionInvite ..|> FirestoreModel
+  SessionInvite "invited" --> AppUser : invitedUserId
+  SessionInvite "inviter" --> AppUser : invitedByUserId
+  SessionInvite "session" --> Session : sessionId
+
+  enum InviteStatus {
+    pending
+    accepted
+    declined
+    cancelled
+  }
+  SessionInvite --> InviteStatus
+
+  class Gym MODEL_COLOR {
+    +String id
+    +String name
+    +String address
+    +GeoPoint? location
+    +String city
+    +String phone
+    +String logoUrl
+    +GymStatus status
+    +String qrPublicId
+    +DateTime? createdAt
+    +DateTime? updatedAt
+    +int yearsOfService
+    +int members
+    +double rating
+    +String dayHours
+    +String nightHours
+    +List<String> equipments
+    +List<String> images
+    +int monthlyScans
+    +int totalScans
+    +Gym fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  Gym ..|> FirestoreModel
+
+  enum GymStatus {
+    active
+    inactive
+    suspended
+  }
+  Gym --> GymStatus
+
+  class GymScan MODEL_COLOR {
+    +String id
+    +String userId
+    +String gymId
+    +String subscriptionId
+    +DateTime? scannedAt
+    +ScanResult result
+    +String deviceId
+    +GeoPoint? scanLocation
+    +String notes
+    +GymScan fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  GymScan ..|> FirestoreModel
+  GymScan "user" --> AppUser : userId
+  GymScan "gym" --> Gym : gymId
+  GymScan "subscription" --> Subscription : subscriptionId
+
+  enum ScanResult {
+    allowed
+    denied
+    already_checked_in
+    subscription_inactive
+    gym_inactive
+  }
+  GymScan --> ScanResult
+
+  class Activity MODEL_COLOR {
+    +String id
+    +String name
+    +int order
+    +bool isActive
+    +DateTime? createdAt
+    +DateTime? updatedAt
+    +Activity fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+    +Activity copyWith(...)
+  }
+
+  class Plan MODEL_COLOR {
+    +String id
+    +String name
+    +String description
+    +double price
+    +String currency
+    +int durationDays
+    +List<String> features
+    +bool isActive
+    +DateTime? createdAt
+    +DateTime? updatedAt
+    +Plan fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  Plan ..|> FirestoreModel
+
+  class Subscription MODEL_COLOR {
+    +String id
+    +String userId
+    +String planId
+    +SubscriptionStatus status
+    +String provider
+    +String providerSubId
+    +DateTime? startAt
+    +DateTime? currentPeriodEnd
+    +DateTime? cancelledAt
+    +DateTime? createdAt
+    +DateTime? updatedAt
+    +Subscription fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  Subscription ..|> FirestoreModel
+  Subscription "user" --> AppUser : userId
+  Subscription "plan" --> Plan : planId
+
+  enum SubscriptionStatus {
+    active
+    past_due
+    cancelled
+    expired
+  }
+  Subscription --> SubscriptionStatus
+
+  class PaymentTransaction MODEL_COLOR {
+    +String id
+    +String userId
+    +String subscriptionId
+    +double amount
+    +String currency
+    +String provider
+    +String providerTxnId
+    +String status
+    +DateTime? createdAt
+    +PaymentTransaction fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  PaymentTransaction ..|> FirestoreModel
+  PaymentTransaction "user" --> AppUser : userId
+  PaymentTransaction "subscription" --> Subscription : subscriptionId
+
+  class AppNotification MODEL_COLOR {
+    +String id
+    +String userId
+    +NotificationType type
+    +String title
+    +String body
+    +Map<String, dynamic> data
+    +bool isRead
+    +DateTime? createdAt
+    +AppNotification fromDoc(DocumentSnapshot doc)
+    +Map<String, dynamic> toMap()
+  }
+  AppNotification ..|> FirestoreModel
+  AppNotification "user" --> AppUser : userId
+
+  enum NotificationType {
+    buddy_request
+    buddy_accepted
+    group_invite
+    session_invite
+    message
+    subscription
+    payout
+  }
+  AppNotification --> NotificationType
+
+  class Product MODEL_COLOR {
+    +String id
+    +String title
+    +String description
+    +double price
+    +String imageUrl
+    +bool isActive
+    +DateTime? createdAt
+    +Product fromDoc(DocumentSnapshot doc)
+  }
+}
+
+package "Repositories" REPO_COLOR {
+  
+  class RepoBase REPO_COLOR {
+    #FirebaseFirestore db
+    +RepoBase(FirebaseFirestore db)
+    +CollectionReference col(String path)
+    +DocumentReference doc(String path)
+    +Query applyPaging(Query q, DocumentSnapshot? startAfter, int limit)
+  }
+
+  class Repos REPO_COLOR {
+    +FirebaseFirestore db
+    +FirebaseAuth auth
+    +FirebaseStorage storage
+    +FirebaseFunctions functions
+    +ActivityRepo activityRepo
+    +AuthRepo authRepo
+    +BuddyRepo buddyRepo
+    +GroupRepo groupRepo
+    +ChatRepo chatRepo
+    +SessionRepo sessionRepo
+    +GymRepo gymRepo
+    +ScanRepo scanRepo
+    +NotificationRepo notificationRepo
+    +MediaRepo mediaRepo
+    +Repos(...)
+  }
+
+  class AuthRepo REPO_COLOR {
+    #FirebaseAuth auth
+    +AuthRepo(FirebaseFirestore db, FirebaseAuth auth)
+    +Stream<User?> authState()
+    +String requireUid()
+    +Future<void> signOut()
+    +Stream<AppUser?> watchMe()
+    +Future<AppUser> getUser(String uid)
+    +Future<void> upsertMe(AppUser user, bool merge)
+    +Future<void> updateMeFields(Map<String, dynamic> fields)
+    +Stream<UserSettings?> watchMySettings()
+    +Future<void> upsertMySettings(UserSettings settings)
+    +Future<AppUser?> getMeOnce()
+    +Future<String> uploadMyProfileImage(File file)
+  }
+  AuthRepo --|> RepoBase
+  AuthRepo ..> AppUser : manages
+  AuthRepo ..> UserSettings : manages
+
+  class BuddyRepo REPO_COLOR {
+    #FirebaseAuth auth
+    +BuddyRepo(FirebaseFirestore db, FirebaseAuth auth)
+    +Stream<List<BuddyRequest>> watchIncomingRequests()
+    +Stream<List<BuddyRequest>> watchOutgoingRequests()
+    +Future<String> sendBuddyRequest(String toUserId, String message)
+    +Future<void> cancelBuddyRequest(String requestId)
+    +Future<void> declineBuddyRequest(String requestId)
+    +Future<void> acceptBuddyRequest(String requestId)
+    +Stream<List<Friendship>> watchMyFriendships(int limit)
+    +Stream<List<AppUser>> watchMyBuddiesUsers(int limit)
+    +Future<List<AppUser>> loadDiscoverUsers(int limit, String? activity, String? city)
+    +Future<Map<String, AppUser>> loadUsersMapByIds(List<String> ids)
+    +Future<List<AppUser>> loadAnyBuddies(int limit)
+  }
+  BuddyRepo --|> RepoBase
+  BuddyRepo ..> BuddyRequest : manages
+  BuddyRepo ..> Friendship : manages
+  BuddyRepo ..> AppUser : manages
+
+  class GroupRepo REPO_COLOR {
+    #FirebaseAuth auth
+    +GroupRepo(FirebaseFirestore db, FirebaseAuth auth)
+    +Stream<List<Group>> watchMyGroupsByMembership()
+    +Future<String> createGroup(String title, String description, String photoUrl, List<String> initialMemberUserIds)
+    +Stream<List<GroupMember>> watchGroupMembers(String groupId)
+    +Future<String> inviteToGroup(String groupId, String invitedUserId)
+    +Stream<List<GroupInvite>> watchMyGroupInvites()
+    +Future<void> acceptGroupInvite(String groupId, String inviteId)
+    +Future<void> declineGroupInvite(String groupId, String inviteId)
+  }
+  GroupRepo --|> RepoBase
+  GroupRepo ..> Group : manages
+  GroupRepo ..> GroupMember : manages
+  GroupRepo ..> GroupInvite : manages
+  GroupRepo ..> Conversation : manages
+  GroupRepo ..> ConversationParticipant : manages
+
+  class ChatRepo REPO_COLOR {
+    #FirebaseAuth auth
+    +ChatRepo(FirebaseFirestore db, FirebaseAuth auth)
+    +Stream<List<(UserConversationIndex, Conversation?)>> watchMyInbox(int limit)
+    +Stream<List<ConversationParticipant>> watchParticipants(String conversationId)
+    +Future<String> getOrCreateDirectConversation(String otherUserId)
+    +Future<String> createGroupConversation(String title, List<String> memberUserIds)
+    +Stream<List<Message>> watchMessages(String conversationId, int limit)
+    +Future<String> sendMessage(String conversationId, MessageType type, String text, ...)
+    +Future<void> markConversationRead(String conversationId)
+    +Future<void> leaveConversation(String conversationId)
+  }
+  ChatRepo --|> RepoBase
+  ChatRepo ..> Conversation : manages
+  ChatRepo ..> ConversationParticipant : manages
+  ChatRepo ..> Message : manages
+  ChatRepo ..> UserConversationIndex : manages
+
+  class SessionRepo REPO_COLOR {
+    #FirebaseAuth auth
+    +SessionRepo(FirebaseFirestore db, FirebaseAuth auth)
+    +Stream<List<Session>> watchMySessions(int limit)
+    +Future<String> createSession(Session session)
+    +Future<String> inviteUserToSession(String sessionId, String invitedUserId)
+    +Stream<List<SessionInvite>> watchMySessionInvites(int limit)
+    +Future<void> acceptSessionInvite(String sessionId, String inviteId)
+    +Future<void> declineSessionInvite(String sessionId, String inviteId)
+    +Stream<List<SessionParticipant>> watchParticipants(String sessionId)
+  }
+  SessionRepo --|> RepoBase
+  SessionRepo ..> Session : manages
+  SessionRepo ..> SessionInvite : manages
+  SessionRepo ..> SessionParticipant : manages
+
+  class GymRepo REPO_COLOR {
+    #FirebaseAuth auth
+    +GymRepo(FirebaseFirestore db, FirebaseAuth auth)
+    +Stream<List<Gym>> watchGyms(String city, int limit)
+    +Future<Gym> getGym(String gymId)
+    +Stream<List<Plan>> watchActivePlans()
+    +Stream<List<Subscription>> watchMySubscriptions(int limit)
+    +Stream<Subscription?> watchMyActiveSubscription()
+    +Future<Subscription?> getMyActiveSubscriptionOnce()
+    +Stream<List<PaymentTransaction>> watchMyTransactions(int limit)
+  }
+  GymRepo --|> RepoBase
+  GymRepo ..> Gym : manages
+  GymRepo ..> Plan : manages
+  GymRepo ..> Subscription : manages
+  GymRepo ..> PaymentTransaction : manages
+
+  class ScanRepo REPO_COLOR {
+    #FirebaseAuth auth
+    #FirebaseFunctions functions
+    +ScanRepo(FirebaseFirestore db, FirebaseAuth auth, FirebaseFunctions functions)
+    +Stream<List<GymScan>> watchMyScanHistory(int limit)
+    +Future<Map<String, dynamic>> validateAndCreateScan(String qrPayload, GeoPoint? scanLocation, String deviceId)
+    +Future<String> createScanClientWrite(String gymId, ScanResult result, ...)
+  }
+  ScanRepo --|> RepoBase
+  ScanRepo ..> GymScan : manages
+
+  class ActivityRepo REPO_COLOR {
+    #FirebaseAuth auth
+    +ActivityRepo(FirebaseFirestore db, FirebaseAuth auth)
+    +Stream<List<Activity>> watchActiveActivities()
+    +Future<void> createActivity(Activity activity)
+    +Future<void> updateActivity(String id, Map<String, dynamic> fields)
+    +Future<void> deactivateActivity(String id)
+  }
+  ActivityRepo --|> RepoBase
+  ActivityRepo ..> Activity : manages
+
+  class NotificationRepo REPO_COLOR {
+    #FirebaseAuth auth
+    +NotificationRepo(FirebaseFirestore db, FirebaseAuth auth)
+    +Stream<List<AppNotification>> watchMyNotifications(int limit)
+    +Future<void> markRead(String notificationId)
+    +Future<void> markAllRead()
+  }
+  NotificationRepo --|> RepoBase
+  NotificationRepo ..> AppNotification : manages
+
+  class MediaRepo REPO_COLOR {
+    #FirebaseStorage storage
+    #FirebaseAuth auth
+    +MediaRepo(FirebaseStorage storage, FirebaseAuth auth)
+    +Future<String> uploadProfilePhoto(File file)
+    +Future<String> uploadChatMedia(String conversationId, File file, String ext)
+  }
+  MediaRepo ..> AppUser : supports
+  MediaRepo ..> Conversation : supports
+}
+
+note right of Repos
+  Central repository container
+  Provides access to all repositories
+  Initialized with Firebase services
+end note
+
+note right of FirestoreModel
+  Base interface for all Firestore models
+  Provides serialization helpers
+  Most models implement this
+end note
+
+@enduml
+

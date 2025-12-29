@@ -11,6 +11,7 @@ import 'package:fitbud/presentation/screens/chats/widget/sent_media_bubble.dart'
 import 'package:fitbud/presentation/screens/chats/widget/sent_message_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/typing_indicator.dart';
 import 'package:fitbud/utils/colors.dart';
+import 'package:fitbud/utils/enums.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
@@ -24,7 +25,6 @@ import '../../../domain/models/chat/message.dart';
 import '../../../domain/repos/repo_provider.dart';
 import '../authentication/controllers/auth_controller.dart';
 import '../profile/buddy_profile_screen.dart';
-import 'package:fitbud/utils/enums.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -67,8 +67,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _markRead();
-
-    // keep your typing indicator demo off by default
     _isTyping = false;
   }
 
@@ -115,7 +113,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         type: MessageType.text,
         text: text,
       );
-
       _messageController.clear();
       _scrollToBottom();
       await _markRead();
@@ -131,20 +128,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // -------------------- media (UI kept, sending can be added later) --------------------
+  // -------------------- media preview --------------------
   Future<void> _pickMedia() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.media,
       allowMultiple: false,
     );
-
     if (result == null || result.files.single.path == null) return;
 
     final file = File(result.files.single.path!);
-    final isVideo = file.path.toLowerCase().endsWith('.mp4') ||
-        file.path.toLowerCase().endsWith('.mov');
+    final p = file.path.toLowerCase();
+    final isVideo = p.endsWith('.mp4') || p.endsWith('.mov');
 
-    // Keep your UI feel: show local bubble immediately (preview).
     setState(() {
       _localMediaMessages.add({
         'file': file,
@@ -153,9 +148,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         'isSent': true,
       });
     });
+
     _scrollToBottom();
 
-    // Actual upload + send mediaUrl should be wired through MediaRepo.
     Get.snackbar(
       "Info",
       "Media preview added. Upload/sending mediaUrl can be enabled next.",
@@ -195,17 +190,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // -------------------- members dialog (group) --------------------
   Future<void> _openMembersDialog() async {
     final parts = await _participants$().first;
-    final members = <Map<String, String>>[];
 
+    final members = <Map<String, String>>[];
     for (final p in parts) {
       try {
         final u = await repos.authRepo.getUser(p.userId);
         members.add({
           'name': (u.displayName ?? '').isEmpty ? 'User' : (u.displayName ?? ''),
           'avatar': (u.photoUrl ?? ''),
+          'userId': p.userId, // include id for navigation
         });
       } catch (_) {
-        members.add({'name': 'User', 'avatar': ''});
+        members.add({'name': 'User', 'avatar': '', 'userId': p.userId});
       }
     }
 
@@ -213,8 +209,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       context: context,
       builder: (_) => MembersDialog(
         members: members,
+        // NOTE: your MembersDialog currently does not pass which member was tapped.
+        // If it supports passing the tapped member/userId, use it to navigate.
         onGroupMemberTap: () {
-          Get.to(() => BuddyProfileScreen(scenario: BuddyScenario.existingBuddy));
+          // Fallback: do nothing if we can't determine which member was tapped.
+          // Recommended: update MembersDialog to provide userId in callback.
         },
       ),
     );
@@ -222,8 +221,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   // -------------------- add members (group) --------------------
   Future<void> _openAddMembersDialog() async {
-    // For now we keep your existing UI dialog.
-    // To make it real: you should pass real buddies list (ids + names + avatar).
     final allBuddies = [
       {'name': 'Ali', 'avatar': 'assets/images/buddy.jpg'},
       {'name': 'Sufyan', 'avatar': 'assets/images/buddy.jpg'},
@@ -237,10 +234,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       builder: (_) => AddMembersDialog(
         allBuddies: allBuddies,
         existingMembers: const [],
-        onConfirm: (selected) async {
-          // This dialog currently returns name/avatar, not userIds.
-          // Real implementation should return userIds and call:
-          // await repos.chatRepo.addMembers(conversationId: widget.conversationId, userIds: ids);
+        onConfirm: (selected) {
           Get.snackbar(
             "Info",
             "Hook this dialog to real userIds next, then call chatRepo.addMembers().",
@@ -248,6 +242,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             colorText: XColors.primaryText,
           );
         },
+      ),
+    );
+  }
+
+  void _openDirectProfile() {
+    if (widget.isGroup) return;
+    final buddyUserId = widget.directOtherUserId.trim();
+    if (buddyUserId.isEmpty) return;
+
+    Get.to(
+          () => BuddyProfileScreen(
+        buddyUserId: buddyUserId,
+        scenario: BuddyScenario.existingBuddy,
+        conversationId: widget.conversationId, // useful for chat dropdown
       ),
     );
   }
@@ -261,20 +269,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       appBar: AppBar(
         backgroundColor: XColors.primaryBG,
         elevation: 0,
+
+        // Leading avatar (tap to open profile on direct chat)
         leading: GestureDetector(
-          onTap: () {
-            if (!widget.isGroup && widget.directOtherUserId.isNotEmpty) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => BuddyProfileScreen(
-                    scenario: BuddyScenario.existingBuddy,
-                    buddyId: widget.directOtherUserId,
-                  ),
-                ),
-              );
-            }
-          },
+          onTap: _openDirectProfile,
           child: Padding(
             padding: const EdgeInsets.only(left: 16),
             child: FutureBuilder<AppUser?>(
@@ -284,26 +282,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 final provider = (u?.photoUrl?.trim().isNotEmpty == true)
                     ? NetworkImage(u!.photoUrl!)
                     : const AssetImage('assets/images/buddy.jpg') as ImageProvider;
-
                 return CircleAvatar(radius: 18, backgroundImage: provider);
               },
             ),
           ),
         ),
+
         title: GestureDetector(
-          onTap: () {
-            if (!widget.isGroup && widget.directOtherUserId.isNotEmpty) {
-              Get.to(() => BuddyProfileScreen(
-                scenario: BuddyScenario.existingBuddy,
-                buddyId: widget.directOtherUserId,
-              ));
-            }
-          },
+          onTap: _openDirectProfile,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.isGroup ? widget.groupName : (widget.directTitle.isEmpty ? "Chat" : widget.directTitle),
+                widget.isGroup
+                    ? widget.groupName
+                    : (widget.directTitle.isEmpty ? "Chat" : widget.directTitle),
                 style: const TextStyle(
                   color: XColors.primaryText,
                   fontSize: 16,
@@ -327,6 +320,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             ],
           ),
         ),
+
         actions: [
           if (widget.isGroup)
             GestureDetector(
@@ -336,10 +330,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 child: Icon(Iconsax.user_add, color: Colors.blue, size: 22),
               ),
             ),
+
           PopupMenuButton<String>(
-            icon: const Icon(LucideIcons.ellipsis_vertical, color: XColors.primaryText),
+            icon: const Icon(
+              LucideIcons.ellipsis_vertical,
+              color: XColors.primaryText,
+            ),
             color: XColors.secondaryBG,
-            onSelected: (value) async {
+            onSelected: (value) {
               switch (value) {
                 case 'session_invite':
                   showModalBottomSheet(
@@ -355,7 +353,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   break;
 
                 case 'members':
-                  await _openMembersDialog();
+                  _openMembersDialog();
                   break;
 
                 case 'leave':
@@ -367,15 +365,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       iconColor: Colors.red,
                       confirmText: "Leave",
                       cancelText: "Cancel",
-                      onConfirm: () async {
-                        await repos.chatRepo.leaveConversation(widget.conversationId);
+                      onConfirm: () {
+                        repos.chatRepo
+                            .leaveConversation(widget.conversationId)
+                            .then((_) => Get.back());
                       },
                     ),
                   );
                   break;
 
                 case 'delete_chat':
-                // For now: you can implement delete by soft-deleting or removing participants + messages.
                   showDialog(
                     context: context,
                     builder: (_) => XButtonsConfirmationDialog(
@@ -384,7 +383,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       iconColor: Colors.red,
                       confirmText: "Ok",
                       cancelText: "Cancel",
-                      onConfirm: () {},
+                      onConfirm: () => Get.back(),
                     ),
                   );
                   break;
@@ -476,14 +475,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               builder: (context, snap) {
                 final msgs = snap.data ?? const <Message>[];
 
-                // mark read on updates (safe)
                 if (snap.hasData) {
                   _markRead();
                 }
 
-                // Reverse list: your repo returns DESC (newest first).
-                // Your UI expects chronological; we can keep descending but scroll accordingly.
-                // Your existing UI uses "maxScrollExtent" approach; here we use reverse list view.
                 final combined = <dynamic>[
                   ..._localMediaMessages,
                   ...msgs,
@@ -507,17 +502,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   reverse: true,
                   itemCount: combined.length + (_isTyping ? 1 : 0) + 1,
                   itemBuilder: (_, index) {
+                    // bottom padding
                     if (index == combined.length + (_isTyping ? 1 : 0)) {
                       return const SizedBox(height: 8);
                     }
 
-                    if (index == combined.length + 1 && _isTyping) {
+                    // typing indicator (if enabled)
+                    if (_isTyping && index == combined.length) {
                       return const TypingIndicator(avatar: 'assets/images/buddy.jpg');
-                    }
-
-                    // Date separator placeholder (keep your UI)
-                    if (index == combined.length + (_isTyping ? 1 : 0)) {
-                      return _dateSeparator("Today");
                     }
 
                     final item = combined[index];
@@ -527,7 +519,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       final file = item['file'] as File;
                       final isVideo = item['isVideo'] as bool;
                       final time = item['time'] as String;
-
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 8),
                         child: SentMedia(
@@ -544,9 +535,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     final isSent = m.senderUserId == uid;
                     final time = _timeLabel(m.createdAt);
 
-                    // Only text supported here; you can expand for image/video by checking m.type + mediaUrl
                     if (m.type != MessageType.text) {
-                      // Keep your UI: show as text fallback (preview)
                       final fallback = m.text.isNotEmpty ? m.text : 'Message';
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 8),
@@ -589,8 +578,4 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
     );
   }
-
-  Widget _dateSeparator(String text) => Center(
-    child: Text(text, style: const TextStyle(color: XColors.primaryText, fontSize: 12)),
-  );
 }

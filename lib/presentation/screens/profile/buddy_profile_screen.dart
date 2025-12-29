@@ -4,300 +4,365 @@ import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
-import 'dart:math';
 
 import '../../../common/appbar/common_appbar.dart';
 import '../../../common/bottom_sheets/session_invite_sheet.dart';
 import '../../../common/widgets/simple_dialog.dart';
 import '../../../common/widgets/two_buttons_dialog.dart';
+import '../../../domain/models/auth/app_user.dart';
+import '../../../domain/repos/repo_provider.dart';
 import '../chats/chat_screen.dart';
 import '../chats/widget/full_screen_media.dart';
 
 class BuddyProfileScreen extends StatelessWidget {
-  final BuddyScenario scenario;
-  const BuddyProfileScreen({super.key, required this.scenario});
+  final String buddyUserId; // REQUIRED
+  final BuddyScenario scenario; // REQUIRED
 
-  // List of all possible activities
-  List<String> get allActivities => [
-    "Cricket",
-    "Football",
-    "Badminton",
-    "Gym",
-    "Running",
-    "Swimming",
-    "Cycling",
-    "Yoga",
-    "Hiking",
-    "Tennis",
-    "Boxing",
-    "Chess",
-    "Walking",
-    "Table Tennis",
-    "Basketball",
-    "Volleyball",
-    "Snooker",
-    "Skating",
-    "Crossfit",
-    "Meditation",
-  ];
+  // Optional but needed for actions
+  final String? requestId; // for accept/reject screen
+  final String? conversationId; // for chat screen (existing buddy)
 
-  // Generate 15 random unique activities
-  List<String> getRandomActivities() {
-    final list = List<String>.from(allActivities);
-    list.shuffle(Random());
-    return list.take(15).toList();
+  const BuddyProfileScreen({
+    super.key,
+    required this.buddyUserId,
+    required this.scenario,
+    this.requestId,
+    this.conversationId,
+  });
+
+  Repos get repos => Get.find<Repos>();
+
+  int? _ageFromDob(DateTime? dob) {
+    if (dob == null) return null;
+    final now = DateTime.now();
+    var age = now.year - dob.year;
+    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  ImageProvider _avatar(String? url) {
+    final u = (url ?? '').trim();
+    if (u.isEmpty || u == 'null') {
+      return const AssetImage('assets/images/buddy.jpg');
+    }
+    if (u.startsWith('http://') || u.startsWith('https://')) {
+      return NetworkImage(u);
+    }
+    return AssetImage(u);
+  }
+
+  String _safe(String? v, [String fallback = '']) {
+    final t = (v ?? '').trim();
+    return t.isEmpty || t == 'null' ? fallback : t;
   }
 
   @override
   Widget build(BuildContext context) {
-    final randomActivities = getRandomActivities();
-
     return Scaffold(
       appBar: XAppBar(
         title: '',
         actions: [
-          if (scenario == BuddyScenario.notBuddy) _NotBuddyButton(),
-
+          if (scenario == BuddyScenario.notBuddy)
+            _NotBuddyButton(buddyUserId: buddyUserId),
           if (scenario == BuddyScenario.requestReceived)
-            _RequestActionButtons(),
-
-          if (scenario == BuddyScenario.existingBuddy) _ExistingBuddyDropdown(),
+            _RequestActionButtons(requestId: requestId),
+          if (scenario == BuddyScenario.existingBuddy)
+            _ExistingBuddyDropdown(
+              buddyUserId: buddyUserId,
+              conversationId: conversationId,
+            ),
         ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              //? Header (Profile picture + Name)
-              SizedBox(
-                width: double.infinity,
-                child: Column(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => FullScreenMedia(
-                              path: "assets/images/buddy.jpg",
-                              isVideo: false,
-                              isAsset: true,
-                            ),
-                          ),
-                        );
-                      },
-                      child: CircleAvatar(
-                        backgroundImage: const AssetImage(
-                          'assets/images/buddy.jpg',
-                        ),
-                        backgroundColor: XColors.secondaryBG,
-                        radius: 45,
-                      ),
-                    ),
+      body: FutureBuilder<AppUser>(
+        future: repos.authRepo.getUser(buddyUserId),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const SafeArea(
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
 
-                    const SizedBox(height: 16),
-                    Text(
-                      'Ali Haider',
-                      style: TextStyle(
-                        color: XColors.primaryText,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
+          if (snap.hasError) {
+            return SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Failed to load profile.\n${snap.error}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: XColors.bodyText.withOpacity(.7)),
+                  ),
                 ),
               ),
+            );
+          }
 
-              const SizedBox(height: 8),
+          if (!snap.hasData) {
+            return const SafeArea(child: Center(child: Text('User not found')));
+          }
 
-              //? Details Section
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 30),
-                child: Column(
-                  children: [
-                    //? Age - Gender - Favourite Row (Centered)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+          final u = snap.data!;
+          final age = _ageFromDob(u.dob);
+
+          final displayName = _safe(u.displayName, 'User');
+          final gender = _safe(u.gender);
+          final fav = _safe(u.favouriteActivity);
+          final gymName = _safe(u.gymName);
+          final city = _safe(u.city);
+          final about = _safe(u.about);
+
+          final activities = (u.activities ?? <String>[]);
+          final interests = activities.isNotEmpty
+              ? activities.take(15).toList()
+              : <String>[];
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header (Profile picture + Name)
+                  SizedBox(
+                    width: double.infinity,
+                    child: Column(
                       children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              LucideIcons.calendar_days,
-                              color: Colors.amber,
-                              size: 11,
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              '25 years old',
-                              style: TextStyle(
-                                color: XColors.bodyText,
-                                fontSize: 10,
+                        GestureDetector(
+                          onTap: () {
+                            final path = _safe(u.photoUrl);
+                            if (path.isEmpty) return;
+
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FullScreenMedia(
+                                  path: path,
+                                  isVideo: false,
+                                  isAsset: !(path.startsWith('http')),
+                                ),
                               ),
-                            ),
-                          ],
+                            );
+                          },
+                          child: CircleAvatar(
+                            backgroundImage: _avatar(u.photoUrl),
+                            backgroundColor: XColors.secondaryBG,
+                            radius: 45,
+                          ),
                         ),
-
-                        const SizedBox(width: 22),
-
-                        Row(
-                          children: [
-                            const Icon(
-                              LucideIcons.venus,
-                              color: Colors.lightGreen,
-                              size: 11,
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'Male',
-                              style: TextStyle(
-                                color: XColors.bodyText,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(width: 22),
-
-                        Row(
-                          children: [
-                            const Icon(
-                              LucideIcons.heart,
-                              color: Colors.pink,
-                              size: 11,
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'Badminton',
-                              style: TextStyle(
-                                color: XColors.bodyText,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 16),
+                        Text(
+                          displayName,
+                          style: const TextStyle(
+                            color: XColors.primaryText,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
+                          ),
                         ),
                       ],
                     ),
+                  ),
 
-                    const SizedBox(height: 4),
+                  const SizedBox(height: 8),
 
-                    //? Gym joined
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  // Details Section
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    child: Column(
                       children: [
-                        const Icon(
-                          LucideIcons.dumbbell,
-                          color: Colors.deepPurple,
-                          size: 11,
+                        // Age - Gender - Favourite Row (Centered)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (age != null)
+                              _MetaItem(
+                                icon: LucideIcons.calendar_days,
+                                iconColor: Colors.amber,
+                                text: '$age years old',
+                              ),
+                            if (age != null && gender.isNotEmpty)
+                              const SizedBox(width: 22),
+                            if (gender.isNotEmpty)
+                              _MetaItem(
+                                icon: LucideIcons.venus,
+                                iconColor: Colors.lightGreen,
+                                text: gender,
+                              ),
+                            if ((age != null || gender.isNotEmpty) && fav.isNotEmpty)
+                              const SizedBox(width: 22),
+                            if (fav.isNotEmpty)
+                              _MetaItem(
+                                icon: LucideIcons.heart,
+                                iconColor: Colors.pink,
+                                text: fav,
+                              ),
+                          ],
                         ),
-                        const SizedBox(width: 4),
+
+                        const SizedBox(height: 4),
+
+                        // Gym joined Row
+                        if (gymName.isNotEmpty)
+                          _CenterRow(
+                            icon: LucideIcons.dumbbell,
+                            iconColor: Colors.deepPurple,
+                            text: gymName,
+                          ),
+
+                        // Location Row
+                        if (city.isNotEmpty)
+                          _CenterRow(
+                            icon: LucideIcons.map_pin,
+                            iconColor: Colors.blue,
+                            text: city,
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Interests Section
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         const Text(
-                          '360 GYM Commercial Area Bahawalpur',
+                          "Interests",
                           style: TextStyle(
                             color: XColors.bodyText,
-                            fontSize: 10,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        if (interests.isEmpty)
+                          Text(
+                            'No interests added yet.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: XColors.bodyText.withOpacity(.6),
+                            ),
+                          )
+                        else
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: interests
+                                .map((item) => BuddyProfileInterestItem(label: item))
+                                .toList(),
+                          ),
                       ],
                     ),
+                  ),
 
-                    const SizedBox(height: 4),
+                  const SizedBox(height: 16),
 
-                    //? Location
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  // About Section
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          LucideIcons.map_pin,
-                          color: Colors.blue,
-                          size: 11,
-                        ),
-                        const SizedBox(width: 4),
                         const Text(
-                          'Model Town A, Bahawalpur',
+                          'About',
                           style: TextStyle(
                             color: XColors.bodyText,
-                            fontSize: 10,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          about.isEmpty ? 'No bio added yet.' : about,
+                          textAlign: TextAlign.justify,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: XColors.bodyText.withOpacity(0.5),
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  const SizedBox(height: 20),
+                ],
               ),
-
-              const SizedBox(height: 16),
-
-              //? Interests Section (Random list)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Interests",
-                      style: TextStyle(
-                        color: XColors.bodyText,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: randomActivities
-                          .map((item) => BuddyProfileInterestItem(label: item))
-                          .toList(),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              //? About Section
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'About',
-                      style: TextStyle(
-                        color: XColors.bodyText,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born and I will give you a complete account of the system, and expound the actual teachings of the great explorer of the truth, the master-builder of human happiness.\nNo one rejects, dislikes, or avoids pleasure itself, because it is pleasure, but because those who do not know how to pursue pleasure rationally encounter consequences that are extremely painful.\nNor again is there anyone who loves or pursues or desires to obtain pain of itself, because it is pain, but because occasionally circumstances occur in which toil and pain can procure him some great pleasure.',
-                      textAlign: TextAlign.justify,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: XColors.bodyText.withValues(alpha: 0.5),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-//                REUSABLE INTEREST ITEM WIDGET
+/// Reusable meta item in the top row
+class _MetaItem extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String text;
 
+  const _MetaItem({
+    required this.icon,
+    required this.iconColor,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: iconColor, size: 11),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: const TextStyle(color: XColors.bodyText, fontSize: 10),
+        ),
+      ],
+    );
+  }
+}
+
+/// One centered line rows (gym/location)
+class _CenterRow extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String text;
+
+  const _CenterRow({
+    required this.icon,
+    required this.iconColor,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: iconColor, size: 11),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              text,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: XColors.bodyText, fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// REUSABLE INTEREST ITEM WIDGET
 class BuddyProfileInterestItem extends StatelessWidget {
   final String label;
-
   const BuddyProfileInterestItem({super.key, required this.label});
 
   @override
@@ -305,7 +370,7 @@ class BuddyProfileInterestItem extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: XColors.primary.withValues(alpha: 0.7),
+        color: XColors.primary.withOpacity(0.7),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -318,6 +383,9 @@ class BuddyProfileInterestItem extends StatelessWidget {
 
 /// Scenario 1: Not a buddy yet
 class _NotBuddyButton extends StatefulWidget {
+  final String buddyUserId;
+  const _NotBuddyButton({required this.buddyUserId});
+
   @override
   State<_NotBuddyButton> createState() => _NotBuddyButtonState();
 }
@@ -335,9 +403,11 @@ class _NotBuddyButtonState extends State<_NotBuddyButton> {
         icon: LucideIcons.circle_check,
         iconColor: XColors.primary,
         buttonText: "Ok",
-        onOk: () => Navigator.pop(context),
+        onOk: () => Get.back(),
       ),
     );
+
+    // TODO: wire buddy invite call using widget.buddyUserId
   }
 
   @override
@@ -354,14 +424,15 @@ class _NotBuddyButtonState extends State<_NotBuddyButton> {
 
 /// Scenario 2: Request received (accept/reject)
 class _RequestActionButtons extends StatelessWidget {
+  final String? requestId;
+  const _RequestActionButtons({required this.requestId});
+
   void _acceptRequest() {
-    // Add accept logic
-    print("Request accepted");
+    // TODO: accept using requestId
   }
 
   void _rejectRequest() {
-    // Add reject logic
-    print("Request rejected");
+    // TODO: reject using requestId
   }
 
   @override
@@ -369,11 +440,11 @@ class _RequestActionButtons extends StatelessWidget {
     return Row(
       children: [
         IconButton(
-          icon: Icon(LucideIcons.circle_check, color: XColors.primary),
+          icon: const Icon(LucideIcons.circle_check, color: XColors.primary),
           onPressed: _acceptRequest,
         ),
         IconButton(
-          icon: Icon(LucideIcons.circle_x, color: XColors.danger),
+          icon: const Icon(LucideIcons.circle_x, color: XColors.danger),
           onPressed: _rejectRequest,
         ),
       ],
@@ -383,18 +454,33 @@ class _RequestActionButtons extends StatelessWidget {
 
 /// Scenario 3: Existing buddy dropdown
 class _ExistingBuddyDropdown extends StatelessWidget {
+  final String buddyUserId;
+  final String? conversationId;
+
+  const _ExistingBuddyDropdown({
+    required this.buddyUserId,
+    required this.conversationId,
+  });
+
   void _createSession(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-
       backgroundColor: Colors.transparent,
       builder: (_) => const SessionInviteSheet(),
     );
   }
 
-  void _startChat(BuildContext context) =>
-      Get.to(() => ChatScreen(isGroup: false, conversationId: '',));
+  void _startChat(BuildContext context) {
+    Get.to(
+          () => ChatScreen(
+        isGroup: false,
+        conversationId: conversationId ?? '',
+        directOtherUserId: buddyUserId,
+      ),
+    );
+  }
+
   void _removeBuddy(BuildContext context) {
     showDialog(
       context: context,
@@ -405,8 +491,7 @@ class _ExistingBuddyDropdown extends StatelessWidget {
         confirmText: "Remove",
         cancelText: "Cancel",
         onConfirm: () {
-          // Add your remove buddy logic here
-          print("Buddy removed");
+          // TODO: remove buddy logic using buddyUserId
         },
       ),
     );
@@ -415,14 +500,13 @@ class _ExistingBuddyDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      icon: Icon(LucideIcons.ellipsis_vertical, color: XColors.primaryText),
+      icon: const Icon(LucideIcons.ellipsis_vertical, color: XColors.primaryText),
       color: XColors.secondaryBG,
       onSelected: (value) {
         switch (value) {
           case 'create_session':
             _createSession(context);
             break;
-
           case 'chat':
             _startChat(context);
             break;
@@ -434,16 +518,13 @@ class _ExistingBuddyDropdown extends StatelessWidget {
       itemBuilder: (_) => [
         PopupMenuItem(
           value: 'create_session',
-          child: Text(
-            "Create Session",
-            style: TextStyle(color: XColors.bodyText),
-          ),
+          child: Text("Create Session", style: TextStyle(color: XColors.bodyText)),
         ),
         PopupMenuItem(
           value: 'chat',
           child: Text("Chat", style: TextStyle(color: XColors.bodyText)),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'remove_buddy',
           child: Text(
             "Remove from Buddies",

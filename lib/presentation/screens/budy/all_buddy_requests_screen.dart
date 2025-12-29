@@ -5,9 +5,9 @@ import 'package:get/get.dart';
 import '../../../common/appbar/common_appbar.dart';
 import '../../../common/widgets/buddy_request_card.dart';
 import '../../../common/widgets/no_data_illustrations.dart';
-import '../profile/buddy_profile_screen.dart';
 import 'package:fitbud/utils/enums.dart';
 
+import '../profile/buddy_profile_screen.dart';
 import 'controller/buddy_controller.dart';
 
 class AllBuddyRequestsScreen extends StatefulWidget {
@@ -53,10 +53,9 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-
               Expanded(
                 child: Obx(() {
-                  // show incoming requests (received by me)
+                  // incoming requests (received by me)
                   final incoming = _filter(buddyC.incoming);
 
                   if (incoming.isEmpty) {
@@ -95,12 +94,16 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
                             if (busy) return;
                             buddyC.rejectRequest(item.req.id);
                           },
-
                           onCardTap: () {
+                            final buddyId = u.id;
+                            if (buddyId.isEmpty) return;
+
                             Get.to(
                                   () => BuddyProfileScreen(
+                                buddyUserId: buddyId,
                                 scenario: BuddyScenario.requestReceived,
-                                buddyId: u.id,
+                                requestId: item.req.id, // IMPORTANT for accept/reject flow
+                                // conversationId: null (not applicable here)
                               ),
                             );
                           },
@@ -123,9 +126,8 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
 
     switch (label) {
       case 'Pending':
-        bgColor = isSelected
-            ? Colors.deepOrange
-            : Colors.deepOrange.withOpacity(0.2);
+        bgColor =
+        isSelected ? Colors.deepOrange : Colors.deepOrange.withOpacity(0.2);
         break;
       case 'Accepted':
         bgColor =
@@ -151,7 +153,10 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
           ),
           child: Text(
             label,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ),

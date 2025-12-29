@@ -103,14 +103,22 @@ class _HomeScreenState extends State<HomeScreen> {
         preferredSize: const Size.fromHeight(95),
         child: Obx(() {
           final me = home.me.value;
+
           return CustomHomeAppBar(
-            name: (me?.displayName?.trim().isNotEmpty == true) ? me!.displayName! : 'FitBud User',
+            name: (me?.displayName?.trim().isNotEmpty == true)
+                ? me!.displayName!
+                : 'FitBud User',
             location: locationController.currentLocation.value,
-            country: (me?.city?.trim().isNotEmpty == true) ? me!.city! : 'Pakistan',
-            imagePath: (me?.photoUrl?.trim().isNotEmpty == true) ? me!.photoUrl! : 'assets/images/profile.png',
+            country:
+            (me?.city?.trim().isNotEmpty == true) ? me!.city! : 'Pakistan',
+            imagePath: (me?.photoUrl?.trim().isNotEmpty == true)
+                ? me!.photoUrl!
+                : 'assets/images/profile.png',
             onLocationTap: () async {
               final pickedLocation = await showLocationBottomSheet(context);
-              if (pickedLocation != null) locationController.updateLocation(pickedLocation);
+              if (pickedLocation != null) {
+                locationController.updateLocation(pickedLocation);
+              }
             },
             onScanTap: () => Get.to(() => QRScanScreen()),
             onNotificationTap: () => Get.to(() => NotificationsScreen()),
@@ -118,7 +126,6 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }),
       ),
-
       body: Stack(
         children: [
           SizedBox(
@@ -127,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
               controller: _scrollController,
               child: Column(
                 children: [
-                  // ---------------- Categories (still static; can be from Firestore later) ----------------
+                  // ---------------- Categories ----------------
                   SizedBox(
                     height: 100,
                     child: ListView.separated(
@@ -136,12 +143,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemCount: 10,
                       separatorBuilder: (_, __) => const SizedBox(width: 16),
                       itemBuilder: (context, index) {
+                        // For now, keep static category
+                        const activity = 'Badminton';
+
                         return CategoryHomeIcon(
                           iconPath: 'assets/icons/badminton.png',
-                          title: 'Badminton',
+                          title: activity,
                           onTap: () {
                             checkPremiumAndProceed(() {
-                              Get.to(() => SpecificCatagoryBuddiesMatchScreen(activity: '',));
+                              Get.to(
+                                    () => const SpecificCatagoryBuddiesMatchScreen(
+                                  activity: activity,
+                                ),
+                              );
                             });
                           },
                         );
@@ -149,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // ---------------- Products/Banners from Firebase ----------------
+                  // ---------------- Products/Banners ----------------
                   const SizedBox(height: 6),
                   Obx(() {
                     if (home.loadingProducts.value) {
@@ -161,14 +175,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     if (home.errProducts.value.isNotEmpty) {
                       return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(home.errProducts.value, style: TextStyle(color: XColors.bodyText.withOpacity(0.7), fontSize: 11)),
+                            Text(
+                              home.errProducts.value,
+                              style: TextStyle(
+                                color: XColors.bodyText.withOpacity(0.7),
+                                fontSize: 11,
+                              ),
+                            ),
                             const SizedBox(height: 10),
                             OutlinedButton(
-                              onPressed: () {}, // products stream auto-retries; keep for UI consistency
+                              onPressed: () {},
                               child: const Text('Retry'),
                             ),
                           ],
@@ -178,7 +199,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     final prods = home.products;
                     if (prods.isEmpty) {
-                      return const SizedBox(height: 180, child: Center(child: Text('No products found')));
+                      return const SizedBox(
+                        height: 180,
+                        child: Center(child: Text('No products found')),
+                      );
                     }
 
                     return SizedBox(
@@ -194,7 +218,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               title: p.title,
                               description: p.description,
                               price: 'Rs. ${p.price.toStringAsFixed(0)}',
-                              imagePath: p.imageUrl.isNotEmpty ? p.imageUrl : 'assets/images/product1.png',
+                              imagePath: p.imageUrl.isNotEmpty
+                                  ? p.imageUrl
+                                  : 'assets/images/product1.png',
                             ),
                           );
                         },
@@ -204,15 +230,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 16),
 
-                  // ---------------- Session Invites from Firebase ----------------
+                  // ---------------- Session Invites ----------------
                   XHeading(
                     title: 'Session Invites',
                     actionText: 'View All',
-                    onActionTap: () => Get.to(() => AllSessionInvitesScreen()),
+                    onActionTap: () => Get.to(() => const AllSessionInvitesScreen()),
                     sidePadding: 16,
                   ),
                   const SizedBox(height: 16),
-
                   Obx(() {
                     if (home.loadingInvites.value) {
                       return const SizedBox(
@@ -223,14 +248,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     if (home.errInvites.value.isNotEmpty) {
                       return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(home.errInvites.value, style: TextStyle(color: XColors.bodyText.withOpacity(0.7), fontSize: 11)),
+                            Text(
+                              home.errInvites.value,
+                              style: TextStyle(
+                                color: XColors.bodyText.withOpacity(0.7),
+                                fontSize: 11,
+                              ),
+                            ),
                             const SizedBox(height: 10),
                             OutlinedButton(
-                              onPressed: () {}, // stream auto-retries
+                              onPressed: () {},
                               child: const Text('Retry'),
                             ),
                           ],
@@ -243,7 +275,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Image.asset('assets/images/no-sessions.png', width: 180),
                           const SizedBox(height: 4),
-                          const Text("No session invites found", style: TextStyle(color: XColors.bodyText, fontSize: 10)),
+                          const Text(
+                            "No session invites found",
+                            style: TextStyle(color: XColors.bodyText, fontSize: 10),
+                          ),
                           const SizedBox(height: 30),
                         ],
                       );
@@ -258,20 +293,31 @@ class _HomeScreenState extends State<HomeScreen> {
                         separatorBuilder: (_, __) => const SizedBox(width: 16),
                         itemBuilder: (context, index) {
                           final inv = home.invites[index];
-                          return HomeSessionInviteCard(
-                            category: (inv.sessionCategory?.isNotEmpty == true) ? inv.sessionCategory! : 'Session',
-                            invitedBy: (inv.invitedByName?.isNotEmpty == true) ? inv.invitedByName! : 'Someone',
-                            dateTime: inv.sessionDateTime?.toString() ?? '',
-                            location: (inv.sessionLocationText?.isNotEmpty == true) ? inv.sessionLocationText! : '',
-                            image: (inv.sessionImageUrl?.isNotEmpty == true) ? inv.sessionImageUrl! : 'assets/images/gym.jpeg',
 
+                          return HomeSessionInviteCard(
+                            category: (inv.sessionCategory?.isNotEmpty == true)
+                                ? inv.sessionCategory!
+                                : 'Session',
+                            invitedBy: (inv.invitedByName?.isNotEmpty == true)
+                                ? inv.invitedByName!
+                                : 'Someone',
+                            dateTime: inv.sessionDateTime?.toString() ?? '',
+                            location: (inv.sessionLocationText?.isNotEmpty == true)
+                                ? inv.sessionLocationText!
+                                : '',
+                            image: (inv.sessionImageUrl?.isNotEmpty == true)
+                                ? inv.sessionImageUrl!
+                                : 'assets/images/gym.jpeg',
                             nameOnTap: () {
-                              if (inv.invitedByUserId.isNotEmpty) {
-                                Get.to(() => BuddyProfileScreen(
+                              final buddyUserId = inv.invitedByUserId;
+                              if (buddyUserId.isEmpty) return;
+
+                              Get.to(
+                                    () => BuddyProfileScreen(
+                                  buddyUserId: buddyUserId,
                                   scenario: BuddyScenario.existingBuddy,
-                                  buddyId: inv.invitedByUserId,
-                                ));
-                              }
+                                ),
+                              );
                             },
                           );
                         },
@@ -281,7 +327,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 18),
 
-                  // ---------------- Premium Plans (Firebase plans collection) ----------------
+                  // ---------------- Premium Plans ----------------
                   XHeading(
                     title: 'Premium Plans',
                     actionText: 'View All',
@@ -289,7 +335,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     sidePadding: 16,
                   ),
                   const SizedBox(height: 16),
-
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Obx(() {
@@ -306,9 +351,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(planController.error.value, style: TextStyle(color: XColors.bodyText.withOpacity(0.7), fontSize: 11)),
+                              Text(
+                                planController.error.value,
+                                style: TextStyle(
+                                  color: XColors.bodyText.withOpacity(0.7),
+                                  fontSize: 11,
+                                ),
+                              ),
                               const SizedBox(height: 10),
-                              OutlinedButton(onPressed: planController.refreshPlans, child: const Text('Retry')),
+                              OutlinedButton(
+                                onPressed: planController.refreshPlans,
+                                child: const Text('Retry'),
+                              ),
                             ],
                           ),
                         );
@@ -318,7 +372,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (firebasePlans.isEmpty) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Text('No active plans found.', style: TextStyle(color: XColors.bodyText, fontSize: 11)),
+                          child: Text(
+                            'No active plans found.',
+                            style: TextStyle(color: XColors.bodyText, fontSize: 11),
+                          ),
                         );
                       }
 
@@ -348,7 +405,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // ---------------- FAB (locked unless premium) ----------------
+          // ---------------- FAB ----------------
           Positioned(
             bottom: 24,
             right: 16,

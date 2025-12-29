@@ -41,7 +41,6 @@ class BuddyFinderScreen extends StatelessWidget {
                 ? Image.network(photo, fit: BoxFit.cover)
                 : Image.asset(photo, fit: BoxFit.cover),
           ),
-
           Positioned(
             bottom: 0,
             child: Container(
@@ -65,23 +64,30 @@ class BuddyFinderScreen extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            user.displayName ?? 'User',
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: XColors.primaryText,
-                              fontSize: 26,
-                              fontWeight: FontWeight.w500,
+                          Expanded(
+                            child: Text(
+                              user.displayName ?? 'User',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: XColors.primaryText,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
-                          const Spacer(),
 
+                          // View profile
                           GestureDetector(
                             onTap: () {
-                              Get.to(() => BuddyProfileScreen(
-                                scenario: BuddyScenario.notBuddy,
-                                buddyId: user.id,
-                              ));
+                              final buddyUserId = user.id;
+                              if (buddyUserId.isEmpty) return;
+
+                              Get.to(
+                                    () => BuddyProfileScreen(
+                                  buddyUserId: buddyUserId,
+                                  scenario: BuddyScenario.notBuddy,
+                                ),
+                              );
                             },
                             child: Icon(
                               LucideIcons.user_round,
@@ -90,6 +96,7 @@ class BuddyFinderScreen extends StatelessWidget {
                           ),
                           const SizedBox(width: 16),
 
+                          // Invite buddy
                           GestureDetector(
                             onTap: invited
                                 ? null
@@ -103,7 +110,7 @@ class BuddyFinderScreen extends StatelessWidget {
                                   icon: LucideIcons.circle_check,
                                   iconColor: XColors.primary,
                                   buttonText: "Ok",
-                                  onOk: () {},
+                                  onOk: () => Get.back(),
                                 ),
                               );
                             },
@@ -117,7 +124,6 @@ class BuddyFinderScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 2),
-
                       Row(
                         children: [
                           const Icon(
@@ -126,14 +132,19 @@ class BuddyFinderScreen extends StatelessWidget {
                             size: 15,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            user.city ?? '',
-                            style: TextStyle(color: XColors.bodyText, fontSize: 12),
+                          Expanded(
+                            child: Text(
+                              user.city ?? '',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: XColors.bodyText,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
-
                       Row(
                         children: [
                           Row(
@@ -146,7 +157,10 @@ class BuddyFinderScreen extends StatelessWidget {
                               const SizedBox(width: 4),
                               Text(
                                 user.gender ?? '',
-                                style: TextStyle(color: XColors.bodyText, fontSize: 12),
+                                style: TextStyle(
+                                  color: XColors.bodyText,
+                                  fontSize: 12,
+                                ),
                               ),
                             ],
                           ),
@@ -163,15 +177,16 @@ class BuddyFinderScreen extends StatelessWidget {
                                 _ageFromDob(user.dob) == null
                                     ? ''
                                     : '${_ageFromDob(user.dob)} years old',
-                                style: TextStyle(color: XColors.bodyText, fontSize: 12),
+                                style: TextStyle(
+                                  color: XColors.bodyText,
+                                  fontSize: 12,
+                                ),
                               ),
                             ],
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 4),
-
                       Row(
                         children: [
                           const Icon(
@@ -180,18 +195,24 @@ class BuddyFinderScreen extends StatelessWidget {
                             size: 15,
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            user.gymName ?? '',
-                            style: TextStyle(color: XColors.bodyText, fontSize: 12),
+                          Expanded(
+                            child: Text(
+                              user.gymName ?? '',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: XColors.bodyText,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 16),
-
-                      Text('Interested in:', style: TextStyle(color: XColors.primary)),
+                      Text(
+                        'Interested in:',
+                        style: TextStyle(color: XColors.primary),
+                      ),
                       const SizedBox(height: 4),
-
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
