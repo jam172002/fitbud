@@ -1,3 +1,4 @@
+// lib/domain/models/buddies/buddy_request.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../common/firestore_model.dart';
 
@@ -31,13 +32,21 @@ class BuddyRequest implements FirestoreModel {
     this.respondedAt,
   });
 
+  bool get isPending => status == BuddyRequestStatus.pending;
+  bool get isAccepted => status == BuddyRequestStatus.accepted;
+  bool get isRejected => status == BuddyRequestStatus.rejected;
+  bool get isCancelled => status == BuddyRequestStatus.cancelled;
+  bool get isBlocked => status == BuddyRequestStatus.blocked;
+
   static BuddyRequest fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
     return BuddyRequest(
       id: doc.id,
       fromUserId: FirestoreModel.readString(d['fromUserId']),
       toUserId: FirestoreModel.readString(d['toUserId']),
-      status: buddyRequestStatusFrom(FirestoreModel.readString(d['status'], fallback: 'pending')),
+      status: buddyRequestStatusFrom(
+        FirestoreModel.readString(d['status'], fallback: 'pending'),
+      ),
       message: FirestoreModel.readString(d['message']),
       createdAt: FirestoreModel.readDate(d['createdAt']),
       respondedAt: FirestoreModel.readDate(d['respondedAt']),

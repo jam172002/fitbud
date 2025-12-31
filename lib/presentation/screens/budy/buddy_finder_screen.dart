@@ -1,3 +1,4 @@
+// lib/presentation/features/budy/buddy_finder_screen.dart
 import 'package:fitbud/utils/colors.dart';
 import 'package:fitbud/utils/enums.dart';
 import 'package:flutter/material.dart';
@@ -27,9 +28,8 @@ class BuddyFinderScreen extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    final photo = (user.photoUrl?.isNotEmpty == true)
-        ? user.photoUrl!
-        : 'assets/images/buddy.jpg';
+    final photo =
+    (user.photoUrl?.isNotEmpty == true) ? user.photoUrl! : 'assets/images/buddy.jpg';
 
     return Scaffold(
       body: Stack(
@@ -56,7 +56,7 @@ class BuddyFinderScreen extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Obx(() {
-                  final invited = buddyC.busyUserIds.contains(user.id);
+                  final busy = buddyC.busyUserIds.contains(user.id);
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -75,8 +75,6 @@ class BuddyFinderScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-
-                          // View profile
                           GestureDetector(
                             onTap: () {
                               final buddyUserId = user.id;
@@ -95,30 +93,38 @@ class BuddyFinderScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 16),
-
-                          // Invite buddy
                           GestureDetector(
-                            onTap: invited
+                            onTap: busy
                                 ? null
                                 : () async {
-                              await buddyC.inviteUser(user.id);
+                              try {
+                                await buddyC.inviteUser(user.id);
 
-                              Get.dialog(
-                                SimpleDialogWidget(
-                                  message:
-                                  "An invitation has been sent to the user to join as your buddy",
-                                  icon: LucideIcons.circle_check,
-                                  iconColor: XColors.primary,
-                                  buttonText: "Ok",
-                                  onOk: () => Get.back(),
-                                ),
-                              );
+                                Get.dialog(
+                                  SimpleDialogWidget(
+                                    message:
+                                    "An invitation has been sent to the user to join as your buddy",
+                                    icon: LucideIcons.circle_check,
+                                    iconColor: XColors.primary,
+                                    buttonText: "Ok",
+                                    onOk: () => Get.back(),
+                                  ),
+                                );
+                              } catch (e) {
+                                Get.dialog(
+                                  SimpleDialogWidget(
+                                    message: e.toString(),
+                                    icon: LucideIcons.circle_x,
+                                    iconColor: XColors.danger,
+                                    buttonText: "Ok",
+                                    onOk: () => Get.back(),
+                                  ),
+                                );
+                              }
                             },
                             child: Icon(
-                              invited
-                                  ? LucideIcons.circle_check
-                                  : LucideIcons.circle_plus,
-                              color: invited ? XColors.primary : Colors.blue,
+                              busy ? LucideIcons.circle_check : LucideIcons.circle_plus,
+                              color: busy ? XColors.primary : Colors.blue,
                             ),
                           ),
                         ],

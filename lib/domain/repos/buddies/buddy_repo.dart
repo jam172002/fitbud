@@ -1,5 +1,7 @@
+// lib/domain/repos/buddies/buddy_repo.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../models/auth/app_user.dart';
 import '../../models/buddies/buddy_request.dart';
 import '../../models/buddies/friendship.dart';
@@ -48,16 +50,63 @@ class BuddyRepo extends RepoBase {
       throw ValidationException('Cannot send request to yourself');
     }
 
-    // prevent duplicate pending requests
-    final existing = await col(FirestorePaths.buddyRequests)
-        .where('fromUserId', isEqualTo: uid)
-        .where('toUserId', isEqualTo: toUserId)
+    // Block if already buddies
+    final ids = [uid, toUserId]..sort();
+    final friendshipId = '${ids[0]}_${ids[1]}';
+    final f = await doc('${FirestorePaths.friendships}/$friendshipId').get();
+    if (f.exists) {
+      throw ValidationException('You are already buddies');
+    }
+
+    // If reverse pending exists, do NOT create duplicate
+    final reversePending = await col(FirestorePaths.buddyRequests)
+        .where('fromUserId', isEqualTo: toUserId)
+        .where('toUserId', isEqualTo: uid)
         .where('status', isEqualTo: BuddyRequestStatus.pending.name)
         .limit(1)
         .get();
+    if (reversePending.docs.isNotEmpty) {
+      throw ValidationException('This user has already sent you a request');
+    }
 
-    if (existing.docs.isNotEmpty) return existing.docs.first.id;
+    // Find any prior request from me -> them (pending/rejected/cancelled)
+    final existingAny = await col(FirestorePaths.buddyRequests)
+        .where('fromUserId', isEqualTo: uid)
+        .where('toUserId', isEqualTo: toUserId)
+        .orderBy('createdAt', descending: true)
+        .limit(5)
+        .get();
 
+    if (existingAny.docs.isNotEmpty) {
+      final doc0 = existingAny.docs.first;
+      final d = doc0.data();
+      final status = (d['status'] as String?) ?? BuddyRequestStatus.pending.name;
+
+      // If pending already exists, return it
+      if (status == BuddyRequestStatus.pending.name) return doc0.id;
+
+      // If rejected/cancelled, re-open to pending (so sender can send again)
+      if (status == BuddyRequestStatus.rejected.name ||
+          status == BuddyRequestStatus.cancelled.name) {
+        await doc0.reference.update({
+          'status': BuddyRequestStatus.pending.name,
+          'message': message,
+          'createdAt': FieldValue.serverTimestamp(),
+          'respondedAt': null,
+        });
+        return doc0.id;
+      }
+
+      // accepted/blocked: do not resend
+      if (status == BuddyRequestStatus.accepted.name) {
+        throw ValidationException('You are already buddies');
+      }
+      if (status == BuddyRequestStatus.blocked.name) {
+        throw PermissionException('Cannot send request');
+      }
+    }
+
+    // Create new
     final ref = col(FirestorePaths.buddyRequests).doc();
     await ref.set({
       'fromUserId': uid,
@@ -116,6 +165,26 @@ class BuddyRepo extends RepoBase {
     });
   }
 
+  /// Receiver cleanup: remove a rejected request doc from their rejected list.
+  Future<void> deleteRejectedIncomingRequest(String requestId) async {
+    final uid = _uid();
+    final ref = doc('${FirestorePaths.buddyRequests}/$requestId');
+
+    await db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
+      final d = snap.data()!;
+
+      if (d['toUserId'] != uid) {
+        throw PermissionException('Only receiver can delete');
+      }
+      final status = (d['status'] as String?) ?? '';
+      if (status != BuddyRequestStatus.rejected.name) return;
+
+      tx.delete(ref);
+    });
+  }
+
   /// Accept request:
   /// - mark request accepted
   /// - create friendship doc (with userIds array)
@@ -124,6 +193,7 @@ class BuddyRepo extends RepoBase {
     final reqRef = doc('${FirestorePaths.buddyRequests}/$requestId');
 
     await db.runTransaction((tx) async {
+      // READS FIRST
       final reqSnap = await tx.get(reqRef);
       if (!reqSnap.exists) throw NotFoundException('Request not found');
 
@@ -135,23 +205,23 @@ class BuddyRepo extends RepoBase {
       if (toUserId != uid) throw PermissionException('Only receiver can accept');
       if (status != BuddyRequestStatus.pending.name) return;
 
-      // 1) Update request
+      final ids = [fromUserId, toUserId]..sort();
+      final friendshipId = '${ids[0]}_${ids[1]}';
+      final fRef = doc('${FirestorePaths.friendships}/$friendshipId');
+
+      final fSnap = await tx.get(fRef); // ✅ read BEFORE writes
+
+      // WRITES AFTER ALL READS
       tx.update(reqRef, {
         'status': BuddyRequestStatus.accepted.name,
         'respondedAt': FieldValue.serverTimestamp(),
       });
 
-      // 2) Create friendship (deterministic ID)
-      final ids = [fromUserId, toUserId]..sort();
-      final friendshipId = '${ids[0]}_${ids[1]}';
-      final fRef = doc('${FirestorePaths.friendships}/$friendshipId');
-
-      final fSnap = await tx.get(fRef);
       if (!fSnap.exists) {
         tx.set(fRef, {
           'userAId': ids[0],
           'userBId': ids[1],
-          'userIds': ids, // IMPORTANT
+          'userIds': ids,
           'createdAt': FieldValue.serverTimestamp(),
           'isBlocked': false,
           'blockedByUserId': '',
@@ -159,6 +229,7 @@ class BuddyRepo extends RepoBase {
       }
     });
   }
+
 
   // -----------------------------
   // Friendships
@@ -173,7 +244,6 @@ class BuddyRepo extends RepoBase {
         .map((q) => q.docs.map(Friendship.fromDoc).toList());
   }
 
-  /// Get list of buddies as AppUser
   Stream<List<AppUser>> watchMyBuddiesUsers({int limit = 200}) {
     final uid = _uid();
     return watchMyFriendships(limit: limit).asyncMap((items) async {
@@ -182,7 +252,6 @@ class BuddyRepo extends RepoBase {
       for (final f in items) {
         if (f.isBlocked) continue;
 
-        // support both new docs (userIds) and old docs
         if (f.userAId == uid) {
           otherIds.add(f.userBId);
         } else if (f.userBId == uid) {
@@ -215,12 +284,10 @@ class BuddyRepo extends RepoBase {
   // Users discovery helpers
   // -----------------------------
 
-  /// Loads candidates from users collection and filters client-side.
-  /// This is practical because Firestore cannot do "id != uid" cleanly.
   Future<List<AppUser>> loadDiscoverUsers({
     int limit = 30,
-    String? activity, // optional filter: activities contains activity
-    String? city,     // optional filter: city == city
+    String? activity,
+    String? city,
   }) async {
     final uid = _uid();
 
@@ -235,17 +302,13 @@ class BuddyRepo extends RepoBase {
       q = q.where('activities', arrayContains: activity.trim());
     }
 
-    // read extra because we will remove current user client-side
     final snap = await q.limit(limit + 10).get();
-
     final users = snap.docs.map((d) => AppUser.fromDoc(d)).toList();
     users.removeWhere((u) => u.id == uid);
 
-    // keep only first limit
     return users.take(limit).toList();
   }
 
-  /// Batch load user docs for request lists
   Future<Map<String, AppUser>> loadUsersMapByIds(List<String> ids) async {
     final map = <String, AppUser>{};
     if (ids.isEmpty) return map;
@@ -265,14 +328,10 @@ class BuddyRepo extends RepoBase {
 
     return map;
   }
-  /// ---------------------------------------------------------------------------
-  /// One-time fallback loader (Future) for buddies
-  /// Used by Profile tab when Stream has no recent data
-  /// ---------------------------------------------------------------------------
+
   Future<List<AppUser>> loadAnyBuddies({int limit = 10}) async {
     final uid = _uid();
 
-    // Load friendships (no ordering – safe fallback)
     final snap = await col(FirestorePaths.friendships)
         .where('userIds', arrayContains: uid)
         .limit(limit)
@@ -282,7 +341,6 @@ class BuddyRepo extends RepoBase {
 
     final friendships = snap.docs.map(Friendship.fromDoc).toList();
 
-    // Collect other user IDs
     final otherUserIds = <String>[];
     for (final f in friendships) {
       if (f.isBlocked) continue;
@@ -296,7 +354,6 @@ class BuddyRepo extends RepoBase {
 
     if (otherUserIds.isEmpty) return [];
 
-    // Firestore whereIn supports max 10
     final ids = otherUserIds.take(10).toList();
 
     final usersSnap = await col(FirestorePaths.users)
@@ -305,5 +362,4 @@ class BuddyRepo extends RepoBase {
 
     return usersSnap.docs.map(AppUser.fromDoc).toList();
   }
-
 }

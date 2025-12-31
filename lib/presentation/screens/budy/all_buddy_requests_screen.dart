@@ -1,5 +1,7 @@
+// lib/presentation/features/budy/all_buddy_requests_screen.dart
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
 
 import '../../../common/appbar/common_appbar.dart';
@@ -7,6 +9,7 @@ import '../../../common/widgets/buddy_request_card.dart';
 import '../../../common/widgets/no_data_illustrations.dart';
 import 'package:fitbud/utils/enums.dart';
 
+import '../../../common/widgets/simple_dialog.dart';
 import '../profile/buddy_profile_screen.dart';
 import 'controller/buddy_controller.dart';
 
@@ -19,6 +22,7 @@ class AllBuddyRequestsScreen extends StatefulWidget {
 
 class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
   String _selectedFilter = 'Pending';
+  bool _showReceived = true; // Received vs Sent (menu)
 
   BuddyController get buddyC => Get.find<BuddyController>();
 
@@ -37,7 +41,35 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: XAppBar(title: 'Buddy Requests'),
+      appBar: XAppBar(
+        title: 'Buddy Requests',
+        actions: [
+          PopupMenuButton<String>(
+            color: XColors.secondaryBG,
+            icon: const Icon(Icons.more_vert, color: XColors.primaryText),
+            onSelected: (v) {
+              if (v == 'received') setState(() => _showReceived = true);
+              if (v == 'sent') setState(() => _showReceived = false);
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'received',
+                child: Text(
+                  'Received',
+                  style: TextStyle(color: XColors.bodyText),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'sent',
+                child: Text(
+                  'Sent',
+                  style: TextStyle(color: XColors.bodyText),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -55,10 +87,10 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
               const SizedBox(height: 16),
               Expanded(
                 child: Obx(() {
-                  // incoming requests (received by me)
-                  final incoming = _filter(buddyC.incoming);
+                  final list = _showReceived ? buddyC.incoming : buddyC.outgoing;
+                  final filtered = _filter(list);
 
-                  if (incoming.isEmpty) {
+                  if (filtered.isEmpty) {
                     return const NoDataIllustration(
                       imagePath: 'assets/images/no-requests.png',
                       message: 'No Requests Found',
@@ -66,12 +98,14 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
                   }
 
                   return ListView.builder(
-                    itemCount: incoming.length,
+                    itemCount: filtered.length,
                     itemBuilder: (context, index) {
-                      final item = incoming[index];
+                      final item = filtered[index];
                       final u = item.other;
 
                       final busy = buddyC.busyRequestIds.contains(item.req.id);
+
+                      final isOutgoing = !_showReceived;
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 16),
@@ -85,15 +119,62 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
                           avatar: (u.photoUrl?.isNotEmpty == true)
                               ? u.photoUrl!
                               : 'assets/images/buddy.jpg',
-                          status: item.req.status.name, // pending/accepted/rejected
-                          onAccept: () {
+                          status: item.req.status.name,
+                          primaryLabel: isOutgoing ? 'Cancel' : 'Accept',
+                          secondaryLabel: 'Reject',
+                          showSecondary: !isOutgoing,
+                          onAccept: () async {
                             if (busy) return;
-                            buddyC.acceptRequest(item.req.id);
+                            try {
+                              await buddyC.acceptRequest(item.req.id);
+                              Get.dialog(
+                                SimpleDialogWidget(
+                                  message: "Request accepted successfully.",
+                                  icon: LucideIcons.circle_check,
+                                  iconColor: XColors.primary,
+                                  buttonText: "Ok",
+                                  onOk: () => Get.back(),
+                                ),
+                              );
+                            } catch (e) {
+                              Get.dialog(
+                                SimpleDialogWidget(
+                                  message: e.toString(),
+                                  icon: LucideIcons.circle_x,
+                                  iconColor: XColors.danger,
+                                  buttonText: "Ok",
+                                  onOk: () => Get.back(),
+                                ),
+                              );
+                            }
                           },
-                          onReject: () {
+                          onReject: () async {
                             if (busy) return;
-                            buddyC.rejectRequest(item.req.id);
+                            try {
+                              await buddyC.rejectRequest(item.req.id);
+                              Get.dialog(
+                                SimpleDialogWidget(
+                                  message: "Request rejected.",
+                                  icon: LucideIcons.circle_check,
+                                  iconColor: XColors.primary,
+                                  buttonText: "Ok",
+                                  onOk: () => Get.back(),
+                                ),
+                              );
+                            } catch (e) {
+                              Get.dialog(
+                                SimpleDialogWidget(
+                                  message: e.toString(),
+                                  icon: LucideIcons.circle_x,
+                                  iconColor: XColors.danger,
+                                  buttonText: "Ok",
+                                  onOk: () => Get.back(),
+                                ),
+                              );
+                            }
                           },
+
+
                           onCardTap: () {
                             final buddyId = u.id;
                             if (buddyId.isEmpty) return;
@@ -101,9 +182,10 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
                             Get.to(
                                   () => BuddyProfileScreen(
                                 buddyUserId: buddyId,
-                                scenario: BuddyScenario.requestReceived,
-                                requestId: item.req.id, // IMPORTANT for accept/reject flow
-                                // conversationId: null (not applicable here)
+                                scenario: _showReceived
+                                    ? BuddyScenario.requestReceived
+                                    : BuddyScenario.notBuddy,
+                                requestId: _showReceived ? item.req.id : null,
                               ),
                             );
                           },
@@ -127,15 +209,13 @@ class _AllBuddyRequestsScreenState extends State<AllBuddyRequestsScreen> {
     switch (label) {
       case 'Pending':
         bgColor =
-        isSelected ? Colors.deepOrange : Colors.deepOrange.withOpacity(0.2);
+        isSelected ? Colors.deepOrange : Colors.deepOrange.withValues( alpha: 0.2);
         break;
       case 'Accepted':
-        bgColor =
-        isSelected ? XColors.primary : XColors.primary.withOpacity(0.2);
+        bgColor = isSelected ? XColors.primary : XColors.primary.withValues( alpha: 0.2);
         break;
       case 'Rejected':
-        bgColor =
-        isSelected ? XColors.danger : XColors.danger.withOpacity(0.2);
+        bgColor = isSelected ? XColors.danger : XColors.danger.withValues( alpha: 0.2);
         break;
       default:
         bgColor = XColors.bodyText;

@@ -1,6 +1,6 @@
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../../domain/models/chat/conversation.dart';
 import '../../../domain/models/chat/conversation_participant.dart';
 import '../../../domain/models/chat/message.dart';
@@ -17,6 +17,13 @@ class ChatRepo extends RepoBase {
     final u = auth.currentUser;
     if (u == null) throw PermissionException('User is not signed in');
     return u.uid;
+  }
+
+  String _cleanId(String v) {
+    final id = v.trim();
+    if (id.isEmpty) return '';
+    // prevent "/abc" or "abc/" from producing //
+    return id.replaceAll(RegExp(r'^/+|/+$'), '');
   }
 
   // -----------------------------
@@ -54,7 +61,7 @@ class ChatRepo extends RepoBase {
   }
 
   // -----------------------------
-  // Inbox: stream user index then hydrate conversations
+  // Inbox
   // -----------------------------
   Stream<List<(UserConversationIndex idx, Conversation? conv)>> watchMyInbox({int limit = 50}) {
     final uid = _uid();
@@ -66,13 +73,14 @@ class ChatRepo extends RepoBase {
       final idxItems = idxSnap.docs.map(UserConversationIndex.fromDoc).toList();
       if (idxItems.isEmpty) return <(UserConversationIndex, Conversation?)>[];
 
-      final ids = idxItems.map((e) => e.conversationId).toList();
+      final ids = idxItems.map((e) => _cleanId(e.conversationId)).where((e) => e.isNotEmpty).toList();
+      if (ids.isEmpty) return <(UserConversationIndex, Conversation?)>[];
 
-      // whereIn max 10 -> chunk
       final convMap = <String, Conversation>{};
       for (var i = 0; i < ids.length; i += 10) {
         final chunk = ids.sublist(i, (i + 10).clamp(0, ids.length));
-        final snap = await db.collection(FirestorePaths.conversations)
+        final snap = await db
+            .collection(FirestorePaths.conversations)
             .where(FieldPath.documentId, whereIn: chunk)
             .get();
         for (final d in snap.docs) {
@@ -80,7 +88,7 @@ class ChatRepo extends RepoBase {
         }
       }
 
-      return idxItems.map((idx) => (idx, convMap[idx.conversationId])).toList();
+      return idxItems.map((idx) => (idx, convMap[_cleanId(idx.conversationId)])).toList();
     });
   }
 
@@ -88,24 +96,33 @@ class ChatRepo extends RepoBase {
   // Participants
   // -----------------------------
   Stream<List<ConversationParticipant>> watchParticipants(String conversationId) {
-    return col(FirestorePaths.conversationParticipants(conversationId))
+    final id = _cleanId(conversationId);
+    if (id.isEmpty) return const Stream.empty();
+
+    return col(FirestorePaths.conversationParticipants(id))
         .snapshots()
-        .map((q) => q.docs.map((d) => ConversationParticipant.fromDoc(d, conversationId: conversationId)).toList());
+        .map((q) => q.docs.map((d) => ConversationParticipant.fromDoc(d, conversationId: id)).toList());
   }
 
   Future<List<String>> _participantIdsOnce(String conversationId) async {
-    final snap = await col(FirestorePaths.conversationParticipants(conversationId)).get();
-    return snap.docs.map((d) => d.id).toList(); // doc id is uid
+    final id = _cleanId(conversationId);
+    if (id.isEmpty) return <String>[];
+
+    final snap = await col(FirestorePaths.conversationParticipants(id)).get();
+    return snap.docs.map((d) => d.id).toList();
   }
 
   // -----------------------------
-  // Direct conversation: get or create (deterministic id)
+  // Direct: get or create
   // -----------------------------
   Future<String> getOrCreateDirectConversation({required String otherUserId}) async {
     final uid = _uid();
-    if (otherUserId == uid) throw RepoException('Cannot chat with yourself', 'self_chat_not_allowed');
+    final other = _cleanId(otherUserId);
 
-    final convId = _directConversationId(uid, otherUserId);
+    if (other.isEmpty) throw RepoException('Other user id is empty', 'invalid_user');
+    if (other == uid) throw RepoException('Cannot chat with yourself', 'self_chat_not_allowed');
+
+    final convId = _directConversationId(uid, other);
     final convRef = doc('${FirestorePaths.conversations}/$convId');
 
     final existing = await convRef.get();
@@ -129,30 +146,22 @@ class ChatRepo extends RepoBase {
         'lastMessageAt': null,
       });
 
-      // participants
-      tx.set(
-        doc('${FirestorePaths.conversationParticipants(convId)}/$uid'),
-        {
-          'userId': uid,
-          'joinedAt': now,
-          'lastReadAt': now,
-          'isMuted': false,
-          'mutedUntil': null,
-        },
-      );
+      tx.set(doc('${FirestorePaths.conversationParticipants(convId)}/$uid'), {
+        'userId': uid,
+        'joinedAt': now,
+        'lastReadAt': now,
+        'isMuted': false,
+        'mutedUntil': null,
+      });
 
-      tx.set(
-        doc('${FirestorePaths.conversationParticipants(convId)}/$otherUserId'),
-        {
-          'userId': otherUserId,
-          'joinedAt': now,
-          'lastReadAt': null,
-          'isMuted': false,
-          'mutedUntil': null,
-        },
-      );
+      tx.set(doc('${FirestorePaths.conversationParticipants(convId)}/$other'), {
+        'userId': other,
+        'joinedAt': now,
+        'lastReadAt': null,
+        'isMuted': false,
+        'mutedUntil': null,
+      });
 
-      // inbox index docs
       tx.set(
         doc('${FirestorePaths.userConversations(uid)}/$convId'),
         {
@@ -167,7 +176,7 @@ class ChatRepo extends RepoBase {
       );
 
       tx.set(
-        doc('${FirestorePaths.userConversations(otherUserId)}/$convId'),
+        doc('${FirestorePaths.userConversations(other)}/$convId'),
         {
           'conversationId': convId,
           'type': ConversationType.direct.name,
@@ -236,11 +245,14 @@ class ChatRepo extends RepoBase {
   // Messages
   // -----------------------------
   Stream<List<Message>> watchMessages(String conversationId, {int limit = 100}) {
-    return col(FirestorePaths.conversationMessages(conversationId))
+    final id = _cleanId(conversationId);
+    if (id.isEmpty) return const Stream.empty();
+
+    return col(FirestorePaths.conversationMessages(id))
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((q) => q.docs.map((d) => Message.fromDoc(d, conversationId: conversationId)).toList());
+        .map((q) => q.docs.map((d) => Message.fromDoc(d, conversationId: id)).toList());
   }
 
   Future<String> sendMessage({
@@ -254,15 +266,15 @@ class ChatRepo extends RepoBase {
     String replyToMessageId = '',
   }) async {
     final uid = _uid();
+    final cid = _cleanId(conversationId);
+    if (cid.isEmpty) throw RepoException('Conversation id is empty', 'invalid_conversation');
 
-    // guard: must be participant
-    final me = await doc('${FirestorePaths.conversationParticipants(conversationId)}/$uid').get();
+    final me = await doc('${FirestorePaths.conversationParticipants(cid)}/$uid').get();
     if (!me.exists) throw PermissionException('Not a participant');
 
-    // IMPORTANT: do NOT query inside transaction
-    final participantIds = await _participantIdsOnce(conversationId);
+    final participantIds = await _participantIdsOnce(cid);
+    final msgRef = col(FirestorePaths.conversationMessages(cid)).doc();
 
-    final msgRef = col(FirestorePaths.conversationMessages(conversationId)).doc();
     final now = FieldValue.serverTimestamp();
     final preview = _preview(type: type, text: text);
 
@@ -281,7 +293,7 @@ class ChatRepo extends RepoBase {
         'deliveryState': DeliveryState.sent.name,
       });
 
-      tx.update(doc('${FirestorePaths.conversations}/$conversationId'), {
+      tx.update(doc('${FirestorePaths.conversations}/$cid'), {
         'lastMessageId': msgRef.id,
         'lastMessagePreview': preview,
         'lastMessageAt': now,
@@ -290,12 +302,11 @@ class ChatRepo extends RepoBase {
 
       for (final pid in participantIds) {
         tx.set(
-          doc('${FirestorePaths.userConversations(pid)}/$conversationId'),
+          doc('${FirestorePaths.userConversations(pid)}/$cid'),
           {
-            'conversationId': conversationId,
+            'conversationId': cid,
             'lastMessageAt': now,
             'lastMessagePreview': preview,
-            // increment unread for everyone except sender; sender forced to 0
             'unreadCount': pid == uid ? 0 : FieldValue.increment(1),
           },
           SetOptions(merge: true),
@@ -308,17 +319,20 @@ class ChatRepo extends RepoBase {
 
   Future<void> markConversationRead(String conversationId) async {
     final uid = _uid();
+    final cid = _cleanId(conversationId);
+    if (cid.isEmpty) return;
+
     final now = FieldValue.serverTimestamp();
     final batch = db.batch();
 
     batch.set(
-      doc('${FirestorePaths.conversationParticipants(conversationId)}/$uid'),
+      doc('${FirestorePaths.conversationParticipants(cid)}/$uid'),
       {'userId': uid, 'lastReadAt': now},
       SetOptions(merge: true),
     );
 
     batch.set(
-      doc('${FirestorePaths.userConversations(uid)}/$conversationId'),
+      doc('${FirestorePaths.userConversations(uid)}/$cid'),
       {'unreadCount': 0},
       SetOptions(merge: true),
     );
@@ -328,9 +342,12 @@ class ChatRepo extends RepoBase {
 
   Future<void> leaveConversation(String conversationId) async {
     final uid = _uid();
+    final cid = _cleanId(conversationId);
+    if (cid.isEmpty) return;
+
     final batch = db.batch();
-    batch.delete(doc('${FirestorePaths.conversationParticipants(conversationId)}/$uid'));
-    batch.delete(doc('${FirestorePaths.userConversations(uid)}/$conversationId'));
+    batch.delete(doc('${FirestorePaths.conversationParticipants(cid)}/$uid'));
+    batch.delete(doc('${FirestorePaths.userConversations(uid)}/$cid'));
     await batch.commit();
   }
 }

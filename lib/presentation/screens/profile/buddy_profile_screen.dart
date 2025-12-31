@@ -1,3 +1,4 @@
+// lib/presentation/features/profile/buddy_profile_screen.dart
 import 'package:fitbud/utils/colors.dart';
 import 'package:fitbud/utils/enums.dart';
 import 'package:flutter/material.dart';
@@ -11,14 +12,13 @@ import '../../../common/widgets/simple_dialog.dart';
 import '../../../common/widgets/two_buttons_dialog.dart';
 import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/repos/repo_provider.dart';
+import '../budy/controller/buddy_controller.dart';
 import '../chats/chat_screen.dart';
 import '../chats/widget/full_screen_media.dart';
 
 class BuddyProfileScreen extends StatelessWidget {
-  final String buddyUserId; // REQUIRED
-  final BuddyScenario scenario; // REQUIRED
-
-  // Optional but needed for actions
+  final String buddyUserId;
+  final BuddyScenario scenario;
   final String? requestId; // for accept/reject screen
   final String? conversationId; // for chat screen (existing buddy)
 
@@ -31,6 +31,7 @@ class BuddyProfileScreen extends StatelessWidget {
   });
 
   Repos get repos => Get.find<Repos>();
+  BuddyController get buddyC => Get.find<BuddyController>();
 
   int? _ageFromDob(DateTime? dob) {
     if (dob == null) return null;
@@ -44,18 +45,38 @@ class BuddyProfileScreen extends StatelessWidget {
 
   ImageProvider _avatar(String? url) {
     final u = (url ?? '').trim();
-    if (u.isEmpty || u == 'null') {
-      return const AssetImage('assets/images/buddy.jpg');
-    }
-    if (u.startsWith('http://') || u.startsWith('https://')) {
-      return NetworkImage(u);
-    }
+    if (u.isEmpty || u == 'null') return const AssetImage('assets/images/buddy.jpg');
+    if (u.startsWith('http://') || u.startsWith('https://')) return NetworkImage(u);
     return AssetImage(u);
   }
 
   String _safe(String? v, [String fallback = '']) {
     final t = (v ?? '').trim();
     return t.isEmpty || t == 'null' ? fallback : t;
+  }
+
+  void _okDialog(String msg) {
+    Get.dialog(
+      SimpleDialogWidget(
+        message: msg,
+        icon: LucideIcons.circle_check,
+        iconColor: XColors.primary,
+        buttonText: "Ok",
+        onOk: () => Get.back(),
+      ),
+    );
+  }
+
+  void _errDialog(Object e) {
+    Get.dialog(
+      SimpleDialogWidget(
+        message: e.toString(),
+        icon: LucideIcons.circle_x,
+        iconColor: XColors.danger,
+        buttonText: "Ok",
+        onOk: () => Get.back(),
+      ),
+    );
   }
 
   @override
@@ -83,7 +104,6 @@ class BuddyProfileScreen extends StatelessWidget {
               child: Center(child: CircularProgressIndicator()),
             );
           }
-
           if (snap.hasError) {
             return SafeArea(
               child: Center(
@@ -92,38 +112,32 @@ class BuddyProfileScreen extends StatelessWidget {
                   child: Text(
                     'Failed to load profile.\n${snap.error}',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: XColors.bodyText.withOpacity(.7)),
+                    style: TextStyle(color: XColors.bodyText.withValues( alpha: .7)),
                   ),
                 ),
               ),
             );
           }
-
           if (!snap.hasData) {
             return const SafeArea(child: Center(child: Text('User not found')));
           }
 
           final u = snap.data!;
           final age = _ageFromDob(u.dob);
-
           final displayName = _safe(u.displayName, 'User');
           final gender = _safe(u.gender);
           final fav = _safe(u.favouriteActivity);
           final gymName = _safe(u.gymName);
           final city = _safe(u.city);
           final about = _safe(u.about);
-
           final activities = (u.activities ?? <String>[]);
-          final interests = activities.isNotEmpty
-              ? activities.take(15).toList()
-              : <String>[];
+          final interests = activities.isNotEmpty ? activities.take(15).toList() : <String>[];
 
           return SafeArea(
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header (Profile picture + Name)
                   SizedBox(
                     width: double.infinity,
                     child: Column(
@@ -132,7 +146,6 @@ class BuddyProfileScreen extends StatelessWidget {
                           onTap: () {
                             final path = _safe(u.photoUrl);
                             if (path.isEmpty) return;
-
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -162,16 +175,12 @@ class BuddyProfileScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 8),
-
-                  // Details Section
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 30),
                     child: Column(
                       children: [
-                        // Age - Gender - Favourite Row (Centered)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -181,8 +190,7 @@ class BuddyProfileScreen extends StatelessWidget {
                                 iconColor: Colors.amber,
                                 text: '$age years old',
                               ),
-                            if (age != null && gender.isNotEmpty)
-                              const SizedBox(width: 22),
+                            if (age != null && gender.isNotEmpty) const SizedBox(width: 22),
                             if (gender.isNotEmpty)
                               _MetaItem(
                                 icon: LucideIcons.venus,
@@ -199,18 +207,13 @@ class BuddyProfileScreen extends StatelessWidget {
                               ),
                           ],
                         ),
-
                         const SizedBox(height: 4),
-
-                        // Gym joined Row
                         if (gymName.isNotEmpty)
                           _CenterRow(
                             icon: LucideIcons.dumbbell,
                             iconColor: Colors.deepPurple,
                             text: gymName,
                           ),
-
-                        // Location Row
                         if (city.isNotEmpty)
                           _CenterRow(
                             icon: LucideIcons.map_pin,
@@ -220,10 +223,7 @@ class BuddyProfileScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // Interests Section
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
@@ -243,7 +243,7 @@ class BuddyProfileScreen extends StatelessWidget {
                             'No interests added yet.',
                             style: TextStyle(
                               fontSize: 12,
-                              color: XColors.bodyText.withOpacity(.6),
+                              color: XColors.bodyText.withValues( alpha: .6),
                             ),
                           )
                         else
@@ -257,10 +257,7 @@ class BuddyProfileScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // About Section
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
@@ -280,13 +277,12 @@ class BuddyProfileScreen extends StatelessWidget {
                           textAlign: TextAlign.justify,
                           style: TextStyle(
                             fontSize: 12,
-                            color: XColors.bodyText.withOpacity(0.5),
+                            color: XColors.bodyText.withValues( alpha: 0.5),
                           ),
                         ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 20),
                 ],
               ),
@@ -298,7 +294,6 @@ class BuddyProfileScreen extends StatelessWidget {
   }
 }
 
-/// Reusable meta item in the top row
 class _MetaItem extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -325,7 +320,6 @@ class _MetaItem extends StatelessWidget {
   }
 }
 
-/// One centered line rows (gym/location)
 class _CenterRow extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -360,7 +354,6 @@ class _CenterRow extends StatelessWidget {
   }
 }
 
-/// REUSABLE INTEREST ITEM WIDGET
 class BuddyProfileInterestItem extends StatelessWidget {
   final String label;
   const BuddyProfileInterestItem({super.key, required this.label});
@@ -370,7 +363,7 @@ class BuddyProfileInterestItem extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: XColors.primary.withOpacity(0.7),
+        color: XColors.primary.withValues( alpha: 0.7),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -381,7 +374,6 @@ class BuddyProfileInterestItem extends StatelessWidget {
   }
 }
 
-/// Scenario 1: Not a buddy yet
 class _NotBuddyButton extends StatefulWidget {
   final String buddyUserId;
   const _NotBuddyButton({required this.buddyUserId});
@@ -391,23 +383,37 @@ class _NotBuddyButton extends StatefulWidget {
 }
 
 class _NotBuddyButtonState extends State<_NotBuddyButton> {
+  BuddyController get buddyC => Get.find<BuddyController>();
+
   bool _isInvited = false;
 
-  void _handleInvite() {
+  Future<void> _handleInvite() async {
     if (_isInvited) return;
+
     setState(() => _isInvited = true);
-
-    Get.dialog(
-      SimpleDialogWidget(
-        message: "Invitation sent to the user.",
-        icon: LucideIcons.circle_check,
-        iconColor: XColors.primary,
-        buttonText: "Ok",
-        onOk: () => Get.back(),
-      ),
-    );
-
-    // TODO: wire buddy invite call using widget.buddyUserId
+    try {
+      await buddyC.inviteUser(widget.buddyUserId);
+      Get.dialog(
+        SimpleDialogWidget(
+          message: "Invitation sent to the user.",
+          icon: LucideIcons.circle_check,
+          iconColor: XColors.primary,
+          buttonText: "Ok",
+          onOk: () => Get.back(),
+        ),
+      );
+    } catch (e) {
+      setState(() => _isInvited = false);
+      Get.dialog(
+        SimpleDialogWidget(
+          message: e.toString(),
+          icon: LucideIcons.circle_x,
+          iconColor: XColors.danger,
+          buttonText: "Ok",
+          onOk: () => Get.back(),
+        ),
+      );
+    }
   }
 
   @override
@@ -422,37 +428,87 @@ class _NotBuddyButtonState extends State<_NotBuddyButton> {
   }
 }
 
-/// Scenario 2: Request received (accept/reject)
 class _RequestActionButtons extends StatelessWidget {
   final String? requestId;
   const _RequestActionButtons({required this.requestId});
 
-  void _acceptRequest() {
-    // TODO: accept using requestId
+  BuddyController get buddyC => Get.find<BuddyController>();
+
+  Future<void> _acceptRequest() async {
+    final id = (requestId ?? '').trim();
+    if (id.isEmpty) return;
+
+    try {
+      await buddyC.acceptRequest(id);
+      Get.dialog(
+        SimpleDialogWidget(
+          message: "Request accepted.",
+          icon: LucideIcons.circle_check,
+          iconColor: XColors.primary,
+          buttonText: "Ok",
+          onOk: () => Get.back(),
+        ),
+      );
+    } catch (e) {
+      Get.dialog(
+        SimpleDialogWidget(
+          message: e.toString(),
+          icon: LucideIcons.circle_x,
+          iconColor: XColors.danger,
+          buttonText: "Ok",
+          onOk: () => Get.back(),
+        ),
+      );
+    }
   }
 
-  void _rejectRequest() {
-    // TODO: reject using requestId
+  Future<void> _rejectRequest() async {
+    final id = (requestId ?? '').trim();
+    if (id.isEmpty) return;
+
+    try {
+      await buddyC.rejectRequest(id);
+      Get.dialog(
+        SimpleDialogWidget(
+          message: "Request rejected.",
+          icon: LucideIcons.circle_check,
+          iconColor: XColors.primary,
+          buttonText: "Ok",
+          onOk: () => Get.back(),
+        ),
+      );
+    } catch (e) {
+      Get.dialog(
+        SimpleDialogWidget(
+          message: e.toString(),
+          icon: LucideIcons.circle_x,
+          iconColor: XColors.danger,
+          buttonText: "Ok",
+          onOk: () => Get.back(),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final busy = (requestId != null) && buddyC.busyRequestIds.contains(requestId);
+
     return Row(
       children: [
         IconButton(
           icon: const Icon(LucideIcons.circle_check, color: XColors.primary),
-          onPressed: _acceptRequest,
+          onPressed: busy ? null : _acceptRequest,
         ),
         IconButton(
           icon: const Icon(LucideIcons.circle_x, color: XColors.danger),
-          onPressed: _rejectRequest,
+          onPressed: busy ? null : _rejectRequest,
         ),
       ],
     );
   }
 }
 
-/// Scenario 3: Existing buddy dropdown
 class _ExistingBuddyDropdown extends StatelessWidget {
   final String buddyUserId;
   final String? conversationId;
@@ -471,14 +527,16 @@ class _ExistingBuddyDropdown extends StatelessWidget {
     );
   }
 
-  void _startChat(BuildContext context) {
-    Get.to(
-          () => ChatScreen(
-        isGroup: false,
-        conversationId: conversationId ?? '',
-        directOtherUserId: buddyUserId,
-      ),
-    );
+  Future<void> _startChat(BuildContext context) async {
+    final repos = Get.find<Repos>();
+    final cid = await repos.chatRepo.getOrCreateDirectConversation(otherUserId: buddyUserId);
+
+    Get.to(() => ChatScreen(
+      isGroup: false,
+      conversationId: cid,
+      directOtherUserId: buddyUserId,
+    ));
+
   }
 
   void _removeBuddy(BuildContext context) {
@@ -491,7 +549,8 @@ class _ExistingBuddyDropdown extends StatelessWidget {
         confirmText: "Remove",
         cancelText: "Cancel",
         onConfirm: () {
-          // TODO: remove buddy logic using buddyUserId
+          // keep existing UI; implement removal later if your Friendship repo method exists
+          Get.back();
         },
       ),
     );

@@ -1,3 +1,4 @@
+// lib/presentation/common/widgets/buddy_request_card.dart
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -10,10 +11,16 @@ class BuddyRequestCard extends StatelessWidget {
   final String location;
   final String time;
   final String avatar;
-  final String status; // pending / accepted / rejected
+  final String status; // pending / accepted / rejected / cancelled / blocked
+
   final VoidCallback onAccept;
   final VoidCallback onReject;
   final VoidCallback onCardTap;
+
+  // New (UI stays same, only labels/visibility change)
+  final String primaryLabel;
+  final String secondaryLabel;
+  final bool showSecondary;
 
   const BuddyRequestCard({
     super.key,
@@ -28,11 +35,13 @@ class BuddyRequestCard extends StatelessWidget {
     required this.onAccept,
     required this.onReject,
     required this.onCardTap,
+    this.primaryLabel = 'Accept',
+    this.secondaryLabel = 'Reject',
+    this.showSecondary = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Conditional avatar size
     final double avatarRadius = status == 'pending' ? 40 : 35;
 
     return GestureDetector(
@@ -42,7 +51,9 @@ class BuddyRequestCard extends StatelessWidget {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundImage: AssetImage(avatar),
+              backgroundImage: avatar.startsWith('http')
+                  ? NetworkImage(avatar) as ImageProvider
+                  : AssetImage(avatar),
               radius: avatarRadius,
             ),
             const SizedBox(width: 16),
@@ -50,7 +61,6 @@ class BuddyRequestCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Name and time
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -73,7 +83,6 @@ class BuddyRequestCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  // Gender, Age, Interest
                   Row(
                     children: [
                       Row(
@@ -132,7 +141,6 @@ class BuddyRequestCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  // Location
                   Row(
                     children: [
                       const Icon(
@@ -153,7 +161,6 @@ class BuddyRequestCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Buttons only for pending
                   if (status == 'pending')
                     Row(
                       children: [
@@ -168,9 +175,9 @@ class BuddyRequestCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(8),
                               color: XColors.primary,
                             ),
-                            child: const Text(
-                              'Accept',
-                              style: TextStyle(
+                            child: Text(
+                              primaryLabel,
+                              style: const TextStyle(
                                 color: XColors.bodyText,
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -178,28 +185,30 @@ class BuddyRequestCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: onReject,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              color: XColors.danger,
-                            ),
-                            child: const Text(
-                              'Reject',
-                              style: TextStyle(
-                                color: XColors.bodyText,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
+                        if (showSecondary) ...[
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: onReject,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                color: XColors.danger,
+                              ),
+                              child: Text(
+                                secondaryLabel,
+                                style: const TextStyle(
+                                  color: XColors.bodyText,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                 ],
