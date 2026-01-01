@@ -343,6 +343,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             image: (inv.sessionImageUrl?.isNotEmpty == true)
                                 ? inv.sessionImageUrl!
                                 : 'assets/images/gym.jpeg',
+                            invite: inv,
                             nameOnTap: () {
                               final buddyUserId = inv.invitedByUserId;
                               if (buddyUserId.isEmpty) return;

@@ -81,17 +81,6 @@ class SessionRepo extends RepoBase {
   }
 
 
-  Stream<List<SessionInvite>> watchMySessionInvites({int limit = 50}) {
-    final uid = _uid();
-    return db.collectionGroup('invites')
-        .where('invitedUserId', isEqualTo: uid)
-        .where('status', isEqualTo: InviteStatus.pending.name)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((q) => q.docs.map(SessionInvite.fromDoc).toList());
-  }
-
 
   Future<void> acceptSessionInvite({
     required String sessionId,
@@ -150,4 +139,35 @@ class SessionRepo extends RepoBase {
         .snapshots()
         .map((q) => q.docs.map((d) => SessionParticipant.fromDoc(d, sessionId: sessionId)).toList());
   }
+
+
+  /// Pending (used by Home cards etc.)
+  Stream<List<SessionInvite>> watchMySessionInvites({int limit = 50}) {
+    final uid = _uid();
+    return db
+        .collectionGroup('invites')
+        .where('invitedUserId', isEqualTo: uid)
+        .where('status', isEqualTo: InviteStatus.pending.name)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((q) => q.docs.map(SessionInvite.fromDoc).toList());
+  }
+
+  /// NEW: Pending / Accepted / Declined for "View All" screen filters
+  Stream<List<SessionInvite>> watchMySessionInvitesByStatus({
+    required InviteStatus status,
+    int limit = 50,
+  }) {
+    final uid = _uid();
+    return db
+        .collectionGroup('invites')
+        .where('invitedUserId', isEqualTo: uid)
+        .where('status', isEqualTo: status.name)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((q) => q.docs.map(SessionInvite.fromDoc).toList());
+  }
+
 }

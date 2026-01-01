@@ -523,8 +523,9 @@ class _ExistingBuddyDropdown extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const SessionInviteSheet(),
+      builder: (_) => SessionInviteSheet(invitedUserId: buddyUserId),
     );
+
   }
 
   Future<void> _startChat(BuildContext context) async {

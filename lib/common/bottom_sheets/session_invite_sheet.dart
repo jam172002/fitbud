@@ -2,16 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:fitbud/utils/colors.dart';
 
+import '../../domain/models/sessions/session.dart';
+import '../../domain/repos/repo_provider.dart';
+
 class SessionInviteSheet extends StatefulWidget {
   final bool isGroup;
   final String? groupName;
   final int? membersCount;
+
+  /// NEW (no UI impact): for direct buddy invite
+  final String? invitedUserId;
 
   const SessionInviteSheet({
     super.key,
     this.isGroup = false,
     this.groupName,
     this.membersCount,
+    this.invitedUserId,
   });
 
   @override
@@ -35,6 +42,16 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
 
   final _locationController = TextEditingController();
 
+  bool _saving = false;
+
+  Repos get repos => Get.find<Repos>();
+
+  @override
+  void dispose() {
+    _locationController.dispose();
+    super.dispose();
+  }
+
   // -----------------------------
   // Pick Date & Time (No Past)
   // -----------------------------
@@ -53,13 +70,11 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
             onPrimary: Colors.white,
             surface: XColors.secondaryBG,
             onSurface: XColors.primaryText,
-          ),
-          dialogBackgroundColor: XColors.primaryBG,
+          ), dialogTheme: DialogThemeData(backgroundColor: XColors.primaryBG),
         ),
         child: child!,
       ),
     );
-
     if (date == null) return;
 
     final time = await showTimePicker(
@@ -72,28 +87,20 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
             onPrimary: Colors.white,
             surface: XColors.secondaryBG,
             onSurface: XColors.primaryText,
-          ),
-          dialogBackgroundColor: XColors.primaryBG,
+          ), dialogTheme: DialogThemeData(backgroundColor: XColors.primaryBG),
         ),
         child: child!,
       ),
     );
-
     if (time == null) return;
 
-    final combined = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
+    final combined = DateTime(date.year, date.month, date.day, time.hour, time.minute);
 
     if (combined.isBefore(now)) {
       Get.snackbar(
         "Invalid Time",
         "You cannot select past date/time",
-        backgroundColor: Colors.red.withOpacity(0.2),
+        backgroundColor: Colors.red.withValues(alpha: 0.2),
         colorText: Colors.red,
       );
       return;
@@ -136,10 +143,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
-              "Cancel",
-              style: TextStyle(color: XColors.secondaryText),
-            ),
+            child: Text("Cancel", style: TextStyle(color: XColors.secondaryText)),
           ),
           TextButton(
             onPressed: () {
@@ -150,22 +154,31 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
                 setState(() {});
               }
             },
-            child: Text("Confirm", style: TextStyle(color: Colors.blue)),
+            child: const Text("Confirm", style: TextStyle(color: Colors.blue)),
           ),
         ],
       ),
     );
   }
 
+  SessionType _mapSessionType(String activity) {
+    final a = activity.toLowerCase();
+    if (a == 'gym') return SessionType.gym;
+    if (a == 'sports') return SessionType.game;
+    return SessionType.other;
+  }
+
   // -----------------------------
-  // Save Session
+  // Save Session (WORKING)
   // -----------------------------
-  void saveSession() {
+  Future<void> saveSession() async {
+    if (_saving) return;
+
     if (selectedActivity == null) {
       Get.snackbar(
         "Required",
         "Please select activity",
-        backgroundColor: XColors.warning.withOpacity(0.7),
+        backgroundColor: XColors.warning.withValues(alpha: 0.7),
         colorText: XColors.primaryText,
       );
       return;
@@ -175,7 +188,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
       Get.snackbar(
         "Required",
         "Please select a gym or enter custom location",
-        backgroundColor: XColors.warning.withOpacity(0.7),
+        backgroundColor: XColors.warning.withValues(alpha: 0.7),
         colorText: XColors.primaryText,
       );
       return;
@@ -185,7 +198,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
       Get.snackbar(
         "Required",
         "Please enter location",
-        backgroundColor: XColors.warning.withOpacity(0.7),
+        backgroundColor: XColors.warning.withValues(alpha: 0.7),
         colorText: XColors.primaryText,
       );
       return;
@@ -195,20 +208,81 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
       Get.snackbar(
         "Required",
         "Please select date & time",
-        backgroundColor: XColors.warning.withOpacity(0.7),
+        backgroundColor: XColors.warning.withValues(alpha: 0.7),
         colorText: XColors.primaryText,
       );
       return;
     }
 
-    Navigator.pop(context);
+    // Direct (non-group) must know who to invite
+    if (!widget.isGroup) {
+      final uid = (widget.invitedUserId ?? '').trim();
+      if (uid.isEmpty) {
+        Get.snackbar(
+          "Error",
+          "No buddy selected to invite",
+          backgroundColor: Colors.red.withValues(alpha: 0.2),
+          colorText: Colors.red,
+        );
+        return;
+      }
+    }
 
-    Get.snackbar(
-      "Success",
-      "Your session invite has been sent!",
-      backgroundColor: XColors.primary.withOpacity(0.7),
-      colorText: XColors.bodyText,
-    );
+    setState(() => _saving = true);
+
+    try {
+      final finalLocation = (selectedActivity == "Gym")
+          ? (location ?? '')
+          : _locationController.text.trim();
+
+      final session = Session(
+        id: '', // repo creates id
+        type: _mapSessionType(selectedActivity!),
+        title: selectedActivity!, // keep current UI intent
+        description: '', // you can add later without UI change
+        createdByUserId: '', // repo overrides with auth uid
+        startAt: selectedDateTime,
+        endAt: null,
+        location: null, // optional later
+        locationName: finalLocation,
+        gymId: '',
+        status: SessionStatus.scheduled,
+        isGroupSession: widget.isGroup,
+        groupId: '',
+        createdAt: null,
+        updatedAt: null,
+      );
+
+      // 1) Create session
+      final sessionId = await repos.sessionRepo.createSession(session);
+
+      // 2) Send invite (direct buddy)
+      if (!widget.isGroup) {
+        await repos.sessionRepo.inviteUserToSession(
+          sessionId: sessionId,
+          invitedUserId: widget.invitedUserId!.trim(),
+        );
+      }
+
+      // Close sheet and show success
+      if (mounted) Navigator.pop(context);
+
+      Get.snackbar(
+        "Success",
+        "Your session invite has been sent!",
+        backgroundColor: XColors.primary.withValues(alpha: 0.7),
+        colorText: XColors.bodyText,
+      );
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        e.toString(),
+        backgroundColor: Colors.red.withValues(alpha: 0.2),
+        colorText: Colors.red,
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -242,6 +316,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
               ),
             ),
             const SizedBox(height: 16),
+
             // Sheet Title
             Text(
               "Create Session Invite",
@@ -280,19 +355,14 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
             if (widget.isGroup) const SizedBox(height: 18),
 
             // Activity Dropdown
-            Text(
-              "Activity",
-              style: TextStyle(color: XColors.secondaryText, fontSize: 12),
-            ),
+            Text("Activity", style: TextStyle(color: XColors.secondaryText, fontSize: 12)),
             const SizedBox(height: 6),
             DropdownButtonFormField<String>(
-              value: selectedActivity,
+              initialValue: selectedActivity,
               decoration: _inputDecoration(),
               dropdownColor: XColors.secondaryBG,
               style: TextStyle(color: XColors.primaryText),
-              items: activities
-                  .map((a) => DropdownMenuItem(value: a, child: Text(a)))
-                  .toList(),
+              items: activities.map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
               onChanged: (value) {
                 selectedActivity = value;
                 selectedGym = null;
@@ -305,19 +375,14 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
 
             // Location / Gym
             if (selectedActivity == "Gym") ...[
-              Text(
-                "Gym Location",
-                style: TextStyle(color: XColors.secondaryText, fontSize: 12),
-              ),
+              Text("Gym Location", style: TextStyle(color: XColors.secondaryText, fontSize: 12)),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
-                value: selectedGym,
+                initialValue: selectedGym,
                 decoration: _inputDecoration(),
                 dropdownColor: XColors.secondaryBG,
                 style: TextStyle(color: XColors.primaryText),
-                items: gymList
-                    .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                    .toList(),
+                items: gymList.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                 onChanged: (value) async {
                   if (value == "Not found in the list") {
                     await openCustomLocationDialog();
@@ -331,12 +396,9 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
               if (selectedGym == null && location != null) ...[
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: XColors.primary.withOpacity(0.1),
+                    color: XColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -350,10 +412,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
                 ),
               ],
             ] else ...[
-              Text(
-                "Location",
-                style: TextStyle(color: XColors.secondaryText, fontSize: 12),
-              ),
+              Text("Location", style: TextStyle(color: XColors.secondaryText, fontSize: 12)),
               const SizedBox(height: 6),
               TextField(
                 controller: _locationController,
@@ -368,21 +427,16 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
                 onChanged: (val) => location = val.trim(),
               ),
             ],
+
             const SizedBox(height: 18),
 
             // Date & Time
-            Text(
-              "Date & Time",
-              style: TextStyle(color: XColors.secondaryText, fontSize: 12),
-            ),
+            Text("Date & Time", style: TextStyle(color: XColors.secondaryText, fontSize: 12)),
             const SizedBox(height: 6),
             GestureDetector(
               onTap: () => pickDateTime(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 14,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 decoration: BoxDecoration(
                   color: XColors.secondaryBG,
                   borderRadius: BorderRadius.circular(12),
@@ -394,21 +448,19 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
                     Text(
                       selectedDateTime == null
                           ? "Select date & time"
-                          : "${selectedDateTime!.day}/${selectedDateTime!.month}/${selectedDateTime!.year}  •  ${selectedDateTime!.hour.toString().padLeft(2, '0')}:${selectedDateTime!.minute.toString().padLeft(2, '0')}",
+                          : "${selectedDateTime!.day}/${selectedDateTime!.month}/${selectedDateTime!.year} • "
+                          "${selectedDateTime!.hour.toString().padLeft(2, '0')}:${selectedDateTime!.minute.toString().padLeft(2, '0')}",
                       style: TextStyle(
                         color: XColors.primaryText.withValues(alpha: 0.5),
                         fontSize: 12,
                       ),
                     ),
-                    Icon(
-                      Icons.calendar_month,
-                      size: 18,
-                      color: XColors.secondaryText,
-                    ),
+                    Icon(Icons.calendar_month, size: 18, color: XColors.secondaryText),
                   ],
                 ),
               ),
             ),
+
             const SizedBox(height: 24),
 
             // Create Button
@@ -418,11 +470,9 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: XColors.primary,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                onPressed: saveSession,
+                onPressed: _saving ? null : saveSession,
                 child: Text(
                   "Create Session",
                   style: TextStyle(color: Colors.white, fontSize: 14),

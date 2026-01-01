@@ -1,4 +1,5 @@
 // lib/app.dart
+import 'package:fitbud/presentation/controller/session_invites_controller.dart';
 import 'package:fitbud/presentation/screens/authentication/controllers/location_controller.dart';
 import 'package:fitbud/presentation/screens/gyms/controllers/gyms_user_controller.dart';
 import 'package:fitbud/presentation/screens/subscription/plans_controller.dart';
@@ -82,6 +83,8 @@ class MainApp extends StatelessWidget {
 
             Get.put(LocationController(), permanent: true);
             Get.put(PremiumPlanController());
+            Get.put(SessionInvitesController());
+
 
             return UserNavigation();
           });
