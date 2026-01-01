@@ -5,6 +5,10 @@ import 'package:fitbud/utils/colors.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../domain/models/auth/app_user.dart';
+import '../../domain/repos/repo_provider.dart';
+import '../../presentation/screens/chats/chat_screen.dart';
+
 class CreateGroupBottomSheet extends StatefulWidget {
   const CreateGroupBottomSheet({super.key});
 
@@ -13,18 +17,14 @@ class CreateGroupBottomSheet extends StatefulWidget {
 }
 
 class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
-  String? groupImage;
+  final Repos repos = Get.find<Repos>();
+
+  String? groupImage; // local preview only
   final ImagePicker _picker = ImagePicker();
   final TextEditingController groupNameController = TextEditingController();
-  final List<Map<String, String>> selectedBuddies = [];
 
-  final List<Map<String, String>> allBuddies = [
-    {'name': 'Ali Haider', 'profilePic': 'assets/images/buddy.jpg'},
-    {'name': 'Sara Khan', 'profilePic': ''},
-    {'name': 'Haider Ali', 'profilePic': ''},
-    {'name': 'Fatima', 'profilePic': 'assets/images/buddy.jpg'},
-    {'name': 'John Doe', 'profilePic': ''},
-  ];
+  /// Selected buddies with required keys: userId, name, profilePic
+  final List<Map<String, String>> selectedBuddies = [];
 
   @override
   void dispose() {
@@ -32,50 +32,105 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
     super.dispose();
   }
 
-  void pickGroupImage() async {
+  Future<void> pickGroupImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      setState(() {
-        groupImage = image.path;
-      });
+      setState(() => groupImage = image.path);
     }
   }
 
-  void removeGroupImage() {
-    setState(() {
-      groupImage = null;
-    });
-  }
+  void removeGroupImage() => setState(() => groupImage = null);
 
   void removeBuddy(Map<String, String> buddy) {
     setState(() {
-      selectedBuddies.remove(buddy);
+      selectedBuddies.removeWhere((b) => b['userId'] == buddy['userId']);
     });
   }
 
-  void createGroup() {
-    if (groupNameController.text.isEmpty || selectedBuddies.isEmpty) {
+  Future<void> createGroup() async {
+    final title = groupNameController.text.trim();
+
+    if (title.isEmpty || selectedBuddies.isEmpty) {
       Get.snackbar(
         'Error',
         'Please enter group name and add at least one buddy.',
-        backgroundColor: XColors.warning.withValues(alpha: 0.9),
+        backgroundColor: XColors.warning.withOpacity(0.9),
         colorText: Colors.white,
         snackPosition: SnackPosition.TOP,
       );
       return;
     }
-    Navigator.pop(context);
-    Get.snackbar(
-      'Success',
-      'Group created successfully!',
-      backgroundColor: XColors.primary.withValues(alpha: 0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-    );
+
+    try {
+      final ids = selectedBuddies
+          .map((e) => (e['userId'] ?? '').trim())
+          .where((e) => e.isNotEmpty)
+          .toSet()
+          .toList();
+
+      // NOTE: photoUrl is not uploaded here, just create group first
+      final groupId = await repos.groupRepo.createGroup(
+        title: title,
+        description: '',
+        photoUrl: '',
+        initialMemberUserIds: ids,
+      );
+
+      final conversationId = 'group_$groupId';
+
+      Navigator.pop(context);
+
+      // open group chat
+      Get.to(() => ChatScreen(
+        conversationId: conversationId,
+        isGroup: true,
+        groupName: title,
+        // groupId is derived inside ChatScreen from conversationId
+      ));
+
+      Get.snackbar(
+        'Success',
+        'Group created successfully!',
+        backgroundColor: XColors.primary.withOpacity(0.9),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to create group: $e',
+        backgroundColor: XColors.danger.withOpacity(0.25),
+        colorText: XColors.primaryText,
+        snackPosition: SnackPosition.TOP,
+      );
+    }
   }
 
-  void showAddBuddiesDialog() {
-    List<Map<String, String>> tempSelected = List.from(selectedBuddies);
+  Future<void> showAddBuddiesDialog() async {
+    // Load real buddies from repo (AppUser list)
+    List<AppUser> buddies = const [];
+    try {
+      buddies = await repos.buddyRepo.watchMyBuddiesUsers().first;
+    } catch (_) {}
+
+    // Convert to map list used by UI
+    final allBuddies = buddies
+        .map((u) => {
+      'userId': u.id,
+      'name': (u.displayName ?? '').trim().isNotEmpty
+          ? (u.displayName ?? '').trim()
+          : 'User',
+      'profilePic': (u.photoUrl ?? '').trim(),
+    })
+        .toList();
+
+    if (!mounted) return;
+
+    // Temp selection by userId
+    final Set<String> tempSelectedIds = selectedBuddies
+        .map((e) => (e['userId'] ?? '').trim())
+        .where((e) => e.isNotEmpty)
+        .toSet();
 
     showDialog(
       context: context,
@@ -84,11 +139,9 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
           builder: (context, setStateDialog) {
             return Dialog(
               backgroundColor: XColors.primaryBG,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: SizedBox(
-                height: 400,
+                height: 420,
                 child: Column(
                   children: [
                     Padding(
@@ -105,24 +158,35 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                     Expanded(
                       child: GridView.builder(
                         padding: const EdgeInsets.all(12),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              childAspectRatio: 0.7,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                            ),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          childAspectRatio: 0.72,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
                         itemCount: allBuddies.length,
                         itemBuilder: (context, index) {
                           final buddy = allBuddies[index];
-                          final isSelected = tempSelected.contains(buddy);
+                          final id = buddy['userId'] ?? '';
+                          final isSelected = tempSelectedIds.contains(id);
+
+                          final pic = (buddy['profilePic'] ?? '').trim();
+                          final hasPic = pic.isNotEmpty;
+
+                          ImageProvider? provider;
+                          if (hasPic) {
+                            provider = pic.startsWith('http')
+                                ? NetworkImage(pic)
+                                : AssetImage(pic) as ImageProvider;
+                          }
+
                           return GestureDetector(
                             onTap: () {
                               setStateDialog(() {
                                 if (isSelected) {
-                                  tempSelected.remove(buddy);
+                                  tempSelectedIds.remove(id);
                                 } else {
-                                  tempSelected.add(buddy);
+                                  tempSelectedIds.add(id);
                                 }
                               });
                             },
@@ -133,28 +197,21 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                                     CircleAvatar(
                                       radius: 28,
                                       backgroundColor: XColors.secondaryBG,
-                                      backgroundImage:
-                                          buddy['profilePic']!.isNotEmpty
-                                          ? AssetImage(buddy['profilePic']!)
-                                          : null,
-                                      child: buddy['profilePic']!.isEmpty
+                                      backgroundImage: provider,
+                                      child: provider == null
                                           ? Icon(
-                                              LucideIcons.user_round,
-                                              color: XColors.primary
-                                                  .withOpacity(0.5),
-                                              size: 24,
-                                            )
+                                        LucideIcons.user_round,
+                                        color: XColors.primary.withOpacity(0.5),
+                                        size: 24,
+                                      )
                                           : null,
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      buddy['name']!,
+                                      buddy['name'] ?? 'User',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: XColors.primaryText,
-                                        fontSize: 12,
-                                      ),
+                                      style: TextStyle(color: XColors.primaryText, fontSize: 12),
                                     ),
                                   ],
                                 ),
@@ -165,11 +222,7 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                                     child: CircleAvatar(
                                       radius: 8,
                                       backgroundColor: Colors.green,
-                                      child: const Icon(
-                                        Icons.check,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
+                                      child: const Icon(Icons.check, color: Colors.white, size: 16),
                                     ),
                                   ),
                               ],
@@ -184,22 +237,26 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () {
+                            final confirmed = allBuddies
+                                .where((b) => tempSelectedIds.contains(b['userId'] ?? ''))
+                                .toList();
+
                             setState(() {
-                              selectedBuddies.clear();
-                              selectedBuddies.addAll(tempSelected);
+                              selectedBuddies
+                                ..clear()
+                                ..addAll(confirmed);
                             });
+
                             Navigator.pop(context);
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: XColors.primary,
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                           child: const Text(
                             'Confirm',
-                            style: TextStyle(color: XColors.primaryText),
+                            style: TextStyle(color: Colors.white),
                           ),
                         ),
                       ),
@@ -217,10 +274,7 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      // This ensures sheet moves above keyboard
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -231,7 +285,6 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Drag handle
               Container(
                 height: 4,
                 width: 40,
@@ -243,11 +296,7 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
               ),
               Text(
                 'Create New Group',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: XColors.primaryText,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: XColors.primaryText),
               ),
               const SizedBox(height: 16),
 
@@ -259,15 +308,9 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                     child: CircleAvatar(
                       radius: 40,
                       backgroundColor: XColors.secondaryBG,
-                      backgroundImage: groupImage != null
-                          ? FileImage(File(groupImage!))
-                          : null,
+                      backgroundImage: groupImage != null ? FileImage(File(groupImage!)) : null,
                       child: groupImage == null
-                          ? Icon(
-                              LucideIcons.camera,
-                              color: XColors.primary,
-                              size: 28,
-                            )
+                          ? Icon(LucideIcons.camera, color: XColors.primary, size: 28)
                           : null,
                     ),
                   ),
@@ -280,11 +323,7 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                         child: CircleAvatar(
                           radius: 12,
                           backgroundColor: Colors.red,
-                          child: const Icon(
-                            Icons.close,
-                            size: 16,
-                            color: Colors.white,
-                          ),
+                          child: const Icon(Icons.close, size: 16, color: Colors.white),
                         ),
                       ),
                     ),
@@ -305,10 +344,7 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
               ),
               const SizedBox(height: 16),
@@ -322,6 +358,15 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                     itemCount: selectedBuddies.length,
                     itemBuilder: (context, index) {
                       final buddy = selectedBuddies[index];
+                      final pic = (buddy['profilePic'] ?? '').trim();
+
+                      ImageProvider? provider;
+                      if (pic.isNotEmpty) {
+                        provider = pic.startsWith('http')
+                            ? NetworkImage(pic)
+                            : AssetImage(pic) as ImageProvider;
+                      }
+
                       return Stack(
                         children: [
                           Container(
@@ -331,28 +376,24 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                                 CircleAvatar(
                                   radius: 28,
                                   backgroundColor: XColors.secondaryBG,
-                                  backgroundImage:
-                                      buddy['profilePic']!.isNotEmpty
-                                      ? AssetImage(buddy['profilePic']!)
-                                      : null,
-                                  child: buddy['profilePic']!.isEmpty
+                                  backgroundImage: provider,
+                                  child: provider == null
                                       ? Icon(
-                                          LucideIcons.user_round,
-                                          color: XColors.primary.withOpacity(
-                                            0.5,
-                                          ),
-                                          size: 20,
-                                        )
+                                    LucideIcons.user_round,
+                                    color: XColors.primary.withOpacity(0.5),
+                                    size: 20,
+                                  )
                                       : null,
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  buddy['name']!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: XColors.primaryText,
-                                    fontSize: 10,
+                                SizedBox(
+                                  width: 64,
+                                  child: Text(
+                                    buddy['name'] ?? 'User',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: XColors.primaryText, fontSize: 10),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ),
                               ],
@@ -366,11 +407,7 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                               child: CircleAvatar(
                                 radius: 10,
                                 backgroundColor: Colors.red,
-                                child: const Icon(
-                                  Icons.close,
-                                  size: 12,
-                                  color: Colors.white,
-                                ),
+                                child: const Icon(Icons.close, size: 12, color: Colors.white),
                               ),
                             ),
                           ),
@@ -379,38 +416,29 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                     },
                   ),
                 ),
-
               const SizedBox(height: 16),
 
-              // Add Buddies Button
+              // Add Buddies
               TextButton(
                 onPressed: showAddBuddiesDialog,
                 style: TextButton.styleFrom(
                   padding: EdgeInsets.zero,
-                  minimumSize: Size(0, 0),
+                  minimumSize: const Size(0, 0),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   splashFactory: NoSplash.splashFactory,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      LucideIcons.user_plus,
-                      color: XColors.primary,
-                      size: 18,
-                    ),
+                    Icon(LucideIcons.user_plus, color: XColors.primary, size: 18),
                     const SizedBox(width: 4),
-                    Text(
-                      'Add Buddies',
-                      style: TextStyle(color: XColors.primary, fontSize: 13),
-                    ),
+                    Text('Add Buddies', style: TextStyle(color: XColors.primary, fontSize: 13)),
                   ],
                 ),
               ),
-
               const SizedBox(height: 14),
 
-              // Create Group Button
+              // Create Group
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -418,14 +446,9 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: XColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text(
-                    'Create Group',
-                    style: TextStyle(fontSize: 13, color: Colors.white),
-                  ),
+                  child: const Text('Create Group', style: TextStyle(fontSize: 13, color: Colors.white)),
                 ),
               ),
               const SizedBox(height: 12),

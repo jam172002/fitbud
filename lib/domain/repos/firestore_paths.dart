@@ -14,8 +14,9 @@ class FirestorePaths {
   static const scans = 'scans';
   static const notifications = 'notifications';
 
+
   // User subcollections
-  static String userSettings(String uid) => '$users/$uid/settings/settings';
+  static String userSettings(String uid) => '$users/$uid/settings';
   static String userDeviceTokens(String uid) => '$users/$uid/deviceTokens';
   static String userScanHistory(String uid) => '$users/$uid/scanHistory';
   static String userNotifications(String uid) => '$users/$uid/notifications';
@@ -23,6 +24,8 @@ class FirestorePaths {
   // Group subcollections
   static String groupMembers(String groupId) => '$groups/$groupId/members';
   static String groupInvites(String groupId) => '$groups/$groupId/invites';
+  static String userGroupMemberships(String uid) =>
+      '$users/$uid/groupMemberships';
 
   // Conversation subcollections
   static String conversationParticipants(String conversationId) => '$conversations/$conversationId/participants';
@@ -36,4 +39,6 @@ class FirestorePaths {
 
   static String userConversations(String uid) =>
       '$users/$uid/conversations';
+
+
 }

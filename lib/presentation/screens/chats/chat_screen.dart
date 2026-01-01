@@ -5,7 +5,6 @@ import 'package:fitbud/presentation/screens/chats/widget/add_members_to_group_di
 import 'package:fitbud/presentation/screens/chats/widget/chat_input_bar.dart';
 import 'package:fitbud/presentation/screens/chats/widget/full_screen_media.dart';
 import 'package:fitbud/presentation/screens/chats/widget/members_dialog.dart';
-import 'package:fitbud/presentation/screens/chats/widget/received_media_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/received_message_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/sent_media_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/sent_message_bubble.dart';
