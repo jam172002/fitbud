@@ -79,7 +79,7 @@ class MainApp extends StatelessWidget {
               GymsUserController(Get.find<Repos>().gymRepo),
               permanent: true,
             );
-
+            Get.put(HomeController());
             Get.put(LocationController(), permanent: true);
             Get.put(PremiumPlanController());
 

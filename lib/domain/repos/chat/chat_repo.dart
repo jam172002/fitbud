@@ -350,4 +350,58 @@ class ChatRepo extends RepoBase {
     batch.delete(doc('${FirestorePaths.userConversations(uid)}/$cid'));
     await batch.commit();
   }
+
+  // In ChatRepo
+
+  Stream<DateTime?> watchMyClearedAt(String conversationId) {
+    final uid = _uid();
+    final cid = _cleanId(conversationId);
+    if (cid.isEmpty) return const Stream.empty();
+
+    return doc('${FirestorePaths.conversationParticipants(cid)}/$uid')
+        .snapshots()
+        .map((snap) {
+      if (!snap.exists) return null;
+      final data = snap.data() ?? {};
+      final ts = data['clearedAt'];
+      if (ts is Timestamp) return ts.toDate();
+      return null;
+    });
+  }
+
+  /// "Delete chat" (clear for me only) - works for direct and group.
+  /// - Marks my participant doc with clearedAt
+  /// - Deletes my inbox index doc so it disappears from Inbox
+  Future<void> deleteChatForMe(String conversationId) async {
+    final uid = _uid();
+    final cid = _cleanId(conversationId);
+    if (cid.isEmpty) return;
+
+    // Make sure I'm a participant (otherwise no-op)
+    final meRef = doc('${FirestorePaths.conversationParticipants(cid)}/$uid');
+    final meSnap = await meRef.get();
+    if (!meSnap.exists) {
+      throw PermissionException('Not a participant');
+    }
+
+    final batch = db.batch();
+    final now = FieldValue.serverTimestamp();
+
+    // 1) Store clearedAt on participant (so UI filters old messages)
+    batch.set(
+      meRef,
+      {
+        'userId': uid,
+        'clearedAt': now,
+        'lastReadAt': now, // optional but keeps unread sane
+      },
+      SetOptions(merge: true),
+    );
+
+    // 2) Remove it from inbox list for me
+    batch.delete(doc('${FirestorePaths.userConversations(uid)}/$cid'));
+
+    await batch.commit();
+  }
+
 }

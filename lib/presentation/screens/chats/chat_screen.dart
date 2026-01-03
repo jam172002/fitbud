@@ -5,7 +5,6 @@ import 'package:fitbud/presentation/screens/chats/widget/add_members_to_group_di
 import 'package:fitbud/presentation/screens/chats/widget/chat_input_bar.dart';
 import 'package:fitbud/presentation/screens/chats/widget/full_screen_media.dart';
 import 'package:fitbud/presentation/screens/chats/widget/members_dialog.dart';
-import 'package:fitbud/presentation/screens/chats/widget/received_media_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/received_message_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/sent_media_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/sent_message_bubble.dart';
@@ -77,6 +76,31 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  Future<void> _deleteChat() async {
+    try {
+      await repos.chatRepo.deleteChatForMe(widget.conversationId);
+
+      // Close dialog first (if open) and go back to Inbox
+      if (Get.isDialogOpen == true) Get.back();
+      if (mounted) Get.back();
+
+      Get.snackbar(
+        "Deleted",
+        "Chat removed for you.",
+        backgroundColor: XColors.primary.withValues(alpha: .15),
+        colorText: XColors.primaryText,
+      );
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Failed to delete chat: $e",
+        backgroundColor: XColors.danger.withValues(alpha: .2),
+        colorText: XColors.primaryText,
+      );
+    }
+  }
+
+
   Future<void> _markRead() async {
     try {
       await repos.chatRepo.markConversationRead(widget.conversationId);
@@ -120,7 +144,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       Get.snackbar(
         "Error",
         "Failed to send: $e",
-        backgroundColor: XColors.danger.withOpacity(.2),
+        backgroundColor: XColors.danger.withValues(alpha: .2),
         colorText: XColors.primaryText,
       );
     } finally {
@@ -154,7 +178,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     Get.snackbar(
       "Info",
       "Media preview added. Upload/sending mediaUrl can be enabled next.",
-      backgroundColor: XColors.primary.withOpacity(.2),
+      backgroundColor: XColors.primary.withValues(alpha: .2),
       colorText: XColors.primaryText,
     );
   }
@@ -238,7 +262,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           Get.snackbar(
             "Info",
             "Hook this dialog to real userIds next, then call chatRepo.addMembers().",
-            backgroundColor: XColors.primary.withOpacity(.2),
+            backgroundColor: XColors.primary.withValues(alpha: .2),
             colorText: XColors.primaryText,
           );
         },
@@ -378,15 +402,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   showDialog(
                     context: context,
                     builder: (_) => XButtonsConfirmationDialog(
-                      message: "Delete chat is not implemented yet.",
+                      message: "Delete chat for you? This will remove it from your inbox and clear message history for you.",
                       icon: Iconsax.trash,
                       iconColor: Colors.red,
-                      confirmText: "Ok",
+                      confirmText: "Delete",
                       cancelText: "Cancel",
-                      onConfirm: () => Get.back(),
+                      onConfirm: _deleteChat,
                     ),
                   );
                   break;
+
 
                 case 'remove_buddy':
                 // TODO: remove buddy logic (not chat repo).
@@ -469,39 +494,50 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       body: Column(
         children: [
-          Expanded(
-            child: StreamBuilder<List<Message>>(
-              stream: repos.chatRepo.watchMessages(widget.conversationId, limit: 200),
-              builder: (context, snap) {
-                final msgs = snap.data ?? const <Message>[];
+      Expanded(
+      child: StreamBuilder<DateTime?>(
+      stream: repos.chatRepo.watchMyClearedAt(widget.conversationId),
+        builder: (context, clearedSnap) {
+          final clearedAt = clearedSnap.data;
 
-                if (snap.hasData) {
-                  _markRead();
-                }
+          return StreamBuilder<List<Message>>(
+            stream: repos.chatRepo.watchMessages(widget.conversationId, limit: 200),
+            builder: (context, snap) {
+              final msgsRaw = snap.data ?? const <Message>[];
 
-                final combined = <dynamic>[
-                  ..._localMediaMessages,
-                  ...msgs,
-                ];
+              // Filter by clearedAt (hide older messages for this user)
+              final msgs = (clearedAt == null)
+                  ? msgsRaw
+                  : msgsRaw.where((m) {
+                final dt = m.createdAt; // DateTime?
+                if (dt == null) return true; // keep if unknown
+                return !dt.isBefore(clearedAt);
+              }).toList();
 
-                if (combined.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No messages yet.',
-                      style: TextStyle(
-                        color: XColors.bodyText.withOpacity(.7),
-                        fontSize: 13,
-                      ),
+              if (snap.hasData) {
+                _markRead();
+              }
+
+              final combined = <dynamic>[..._localMediaMessages, ...msgs];
+
+              if (combined.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No messages yet.',
+                    style: TextStyle(
+                      color: XColors.bodyText.withValues(alpha: .7),
+                      fontSize: 13,
                     ),
-                  );
-                }
+                  ),
+                );
+              }
 
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  reverse: true,
-                  itemCount: combined.length + (_isTyping ? 1 : 0) + 1,
-                  itemBuilder: (_, index) {
+              return ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                reverse: true,
+                itemCount: combined.length + (_isTyping ? 1 : 0) + 1,
+                itemBuilder: (_, index) {
                     // bottom padding
                     if (index == combined.length + (_isTyping ? 1 : 0)) {
                       return const SizedBox(height: 8);
@@ -563,11 +599,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         isGroup: widget.isGroup,
                       ),
                     );
-                  },
-                );
-              },
-            ),
-          ),
+                },
+              );
+            },
+          );
+        },
+      ),
+      ),
 
           ChatInputBar(
             controller: _messageController,
