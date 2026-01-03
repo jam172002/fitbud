@@ -10,7 +10,7 @@ class SessionInviteSheet extends StatefulWidget {
   final String? groupName;
   final int? membersCount;
 
-  /// NEW (no UI impact): for direct buddy invite
+  ///  for direct buddy invite
   final String? invitedUserId;
 
   const SessionInviteSheet({

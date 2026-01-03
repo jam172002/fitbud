@@ -62,6 +62,30 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // for media preview only (optional)
   final List<Map<String, dynamic>> _localMediaMessages = [];
 
+  Future<void> _deleteChat() async {
+    try {
+      await repos.chatRepo.deleteChatForMe(widget.conversationId);
+
+      // Close dialog first (if open) and go back to Inbox
+      if (Get.isDialogOpen == true) Get.back();
+      if (mounted) Get.back();
+
+      Get.snackbar(
+        "Deleted",
+        "Chat removed for you.",
+        backgroundColor: XColors.primary.withOpacity(.15),
+        colorText: XColors.primaryText,
+      );
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Failed to delete chat: $e",
+        backgroundColor: XColors.danger.withOpacity(.2),
+        colorText: XColors.primaryText,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -377,14 +401,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   showDialog(
                     context: context,
                     builder: (_) => XButtonsConfirmationDialog(
-                      message: "Delete chat is not implemented yet.",
+                      message: "Delete chat for you? This will remove it from your inbox and clear message history for you.",
                       icon: Iconsax.trash,
                       iconColor: Colors.red,
-                      confirmText: "Ok",
+                      confirmText: "Delete",
                       cancelText: "Cancel",
-                      onConfirm: () => Get.back(),
+                      onConfirm: _deleteChat,
                     ),
                   );
+                  break;
+
                   break;
 
                 case 'remove_buddy':
@@ -577,4 +603,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
+
 }
