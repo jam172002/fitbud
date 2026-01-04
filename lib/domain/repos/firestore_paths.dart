@@ -29,6 +29,8 @@ class FirestorePaths {
   static String conversationMessages(String conversationId) => '$conversations/$conversationId/messages';
   static String messageReceipts(String conversationId, String messageId) =>
       '$conversations/$conversationId/messages/$messageId/receipts';
+  static String userInbox(String uid) => '$users/$uid/inbox'; // <--- IMPORTANT
+  static String userGroupMemberships(String uid) => '$users/$uid/groupMemberships';
 
   // Session subcollections
   static String sessionInvites(String sessionId) => '$sessions/$sessionId/invites';

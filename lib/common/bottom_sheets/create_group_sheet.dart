@@ -1,244 +1,234 @@
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:fitbud/domain/models/auth/app_user.dart';
+import 'package:fitbud/domain/repos/repo_provider.dart';
+import 'package:fitbud/presentation/screens/chats/chat_screen.dart';
+import 'package:fitbud/utils/colors.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
-import 'package:fitbud/utils/colors.dart';
 import 'package:get/get.dart';
-import 'package:image_picker/image_picker.dart';
 
-class CreateGroupBottomSheet extends StatefulWidget {
-  const CreateGroupBottomSheet({super.key});
-
-  @override
-  State<CreateGroupBottomSheet> createState() => _CreateGroupBottomSheetState();
+void showCreateGroupSheet(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => const _CreateGroupSheet(),
+  );
 }
 
-class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
-  String? groupImage;
-  final ImagePicker _picker = ImagePicker();
-  final TextEditingController groupNameController = TextEditingController();
-  final List<Map<String, String>> selectedBuddies = [];
+class _CreateGroupSheet extends StatefulWidget {
+  const _CreateGroupSheet();
 
-  final List<Map<String, String>> allBuddies = [
-    {'name': 'Ali Haider', 'profilePic': 'assets/images/buddy.jpg'},
-    {'name': 'Sara Khan', 'profilePic': ''},
-    {'name': 'Haider Ali', 'profilePic': ''},
-    {'name': 'Fatima', 'profilePic': 'assets/images/buddy.jpg'},
-    {'name': 'John Doe', 'profilePic': ''},
-  ];
+  @override
+  State<_CreateGroupSheet> createState() => _CreateGroupSheetState();
+}
+
+class _CreateGroupSheetState extends State<_CreateGroupSheet> {
+  final repos = Get.find<Repos>();
+
+  final nameCtrl = TextEditingController();
+  final Set<String> selectedIds = {};
+
+  bool loading = true;
+  bool creating = false;
+
+  List<AppUser> buddies = [];
+
+  Uint8List? _webBytes;
+  File? _file;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBuddies();
+  }
 
   @override
   void dispose() {
-    groupNameController.dispose();
+    nameCtrl.dispose();
     super.dispose();
   }
 
-  void pickGroupImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
+  Future<void> _loadBuddies() async {
+    try {
+      final list = await repos.buddyRepo.watchMyBuddiesUsers().first;
+      if (!mounted) return;
       setState(() {
-        groupImage = image.path;
+        buddies = list;
+        loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => loading = false);
+      Get.snackbar(
+        'Error',
+        'Failed to load buddies: $e',
+        backgroundColor: XColors.danger.withValues(alpha: .25),
+        colorText: XColors.primaryText,
+        snackPosition: SnackPosition.TOP,
+      );
+    }
+  }
+
+  String _nameOf(AppUser u) {
+    final n = (u.displayName ?? '').trim();
+    return n.isEmpty ? 'Buddy' : n;
+  }
+
+  ImageProvider _avatarOf(AppUser u) {
+    final url = (u.photoUrl ?? '').trim();
+    if (url.isNotEmpty) return NetworkImage(url);
+    return const AssetImage('assets/images/buddy.jpg');
+  }
+
+  Future<void> _pickImage() async {
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+    if (res == null || res.files.isEmpty) return;
+
+    final f = res.files.single;
+    if (kIsWeb) {
+      if (f.bytes == null) return;
+      setState(() {
+        _webBytes = f.bytes!;
+        _file = null;
+      });
+    } else {
+      if (f.path == null) return;
+      setState(() {
+        _file = File(f.path!);
+        _webBytes = null;
       });
     }
   }
 
-  void removeGroupImage() {
+  void _removeImage() {
     setState(() {
-      groupImage = null;
+      _webBytes = null;
+      _file = null;
     });
   }
 
-  void removeBuddy(Map<String, String> buddy) {
-    setState(() {
-      selectedBuddies.remove(buddy);
-    });
+  Future<String> _uploadGroupPhoto(String groupId) async {
+    if (_webBytes == null && _file == null) return '';
+
+    final ref = FirebaseStorage.instance.ref().child('groups/$groupId/avatar.jpg');
+    final meta = SettableMetadata(contentType: 'image/jpeg');
+
+    if (kIsWeb) {
+      await ref.putData(_webBytes!, meta);
+    } else {
+      await ref.putFile(_file!, meta);
+    }
+    return await ref.getDownloadURL();
   }
 
-  void createGroup() {
-    if (groupNameController.text.isEmpty || selectedBuddies.isEmpty) {
+  Future<void> _createGroup() async {
+    final title = nameCtrl.text.trim();
+    if (title.isEmpty) {
       Get.snackbar(
         'Error',
-        'Please enter group name and add at least one buddy.',
-        backgroundColor: XColors.warning.withValues(alpha: 0.9),
+        'Please enter group name.',
+        backgroundColor: XColors.warning.withValues(alpha: .95),
         colorText: Colors.white,
         snackPosition: SnackPosition.TOP,
       );
       return;
     }
-    Navigator.pop(context);
-    Get.snackbar(
-      'Success',
-      'Group created successfully!',
-      backgroundColor: XColors.primary.withValues(alpha: 0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-    );
-  }
 
-  void showAddBuddiesDialog() {
-    List<Map<String, String>> tempSelected = List.from(selectedBuddies);
+    if (selectedIds.isEmpty) {
+      Get.snackbar(
+        'Error',
+        'Select at least one buddy.',
+        backgroundColor: XColors.warning.withValues(alpha: .95),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+      );
+      return;
+    }
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return Dialog(
-              backgroundColor: XColors.primaryBG,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: SizedBox(
-                height: 400,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        'Select Buddies',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: XColors.primaryText,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: GridView.builder(
-                        padding: const EdgeInsets.all(12),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              childAspectRatio: 0.7,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                            ),
-                        itemCount: allBuddies.length,
-                        itemBuilder: (context, index) {
-                          final buddy = allBuddies[index];
-                          final isSelected = tempSelected.contains(buddy);
-                          return GestureDetector(
-                            onTap: () {
-                              setStateDialog(() {
-                                if (isSelected) {
-                                  tempSelected.remove(buddy);
-                                } else {
-                                  tempSelected.add(buddy);
-                                }
-                              });
-                            },
-                            child: Stack(
-                              children: [
-                                Column(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 28,
-                                      backgroundColor: XColors.secondaryBG,
-                                      backgroundImage:
-                                          buddy['profilePic']!.isNotEmpty
-                                          ? AssetImage(buddy['profilePic']!)
-                                          : null,
-                                      child: buddy['profilePic']!.isEmpty
-                                          ? Icon(
-                                              LucideIcons.user_round,
-                                              color: XColors.primary
-                                                  .withOpacity(0.5),
-                                              size: 24,
-                                            )
-                                          : null,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      buddy['name']!,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: XColors.primaryText,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (isSelected)
-                                  Positioned(
-                                    top: 0,
-                                    right: 20,
-                                    child: CircleAvatar(
-                                      radius: 8,
-                                      backgroundColor: Colors.green,
-                                      child: const Icon(
-                                        Icons.check,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              selectedBuddies.clear();
-                              selectedBuddies.addAll(tempSelected);
-                            });
-                            Navigator.pop(context);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: XColors.primary,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'Confirm',
-                            style: TextStyle(color: XColors.primaryText),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
+    if (creating) return;
+    setState(() => creating = true);
+
+    try {
+      // 1) pre-generate groupId
+      final groupId = repos.groupRepo.newGroupId();
+
+      // 2) upload image (optional)
+      final photoUrl = await _uploadGroupPhoto(groupId);
+
+      // 3) create group + conversation + participants + user inbox index
+      final gid = await repos.groupRepo.createGroup(
+        groupId: groupId,
+        title: title,
+        photoUrl: photoUrl,
+        initialMemberUserIds: selectedIds.toList(),
+      );
+
+      final convId = 'group_$gid';
+
+      if (mounted) Navigator.pop(context);
+
+      Get.to(() => ChatScreen(
+        conversationId: convId,
+        isGroup: true,
+        groupName: title,
+      ));
+
+      Get.snackbar(
+        'Success',
+        'Group created.',
+        backgroundColor: XColors.primary.withValues(alpha: .18),
+        colorText: XColors.primaryText,
+        snackPosition: SnackPosition.TOP,
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to create group: $e',
+        backgroundColor: XColors.danger.withValues(alpha: .25),
+        colorText: XColors.primaryText,
+        snackPosition: SnackPosition.TOP,
+      );
+    } finally {
+      if (mounted) setState(() => creating = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      // This ensures sheet moves above keyboard
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: XColors.primaryBG,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         ),
-        child: SingleChildScrollView(
+        child: loading
+            ? const SizedBox(height: 240, child: Center(child: CircularProgressIndicator()))
+            : SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Drag handle
-              Container(
-                height: 4,
-                width: 40,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: XColors.secondaryBG,
-                  borderRadius: BorderRadius.circular(2),
+              Center(
+                child: Container(
+                  height: 4,
+                  width: 40,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: XColors.secondaryBG,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
               Text(
@@ -251,50 +241,43 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
               ),
               const SizedBox(height: 16),
 
-              // Group Image
-              Stack(
-                children: [
-                  GestureDetector(
-                    onTap: pickGroupImage,
-                    child: CircleAvatar(
-                      radius: 40,
-                      backgroundColor: XColors.secondaryBG,
-                      backgroundImage: groupImage != null
-                          ? FileImage(File(groupImage!))
-                          : null,
-                      child: groupImage == null
-                          ? Icon(
-                              LucideIcons.camera,
-                              color: XColors.primary,
-                              size: 28,
-                            )
-                          : null,
+              Center(
+                child: Stack(
+                  children: [
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: CircleAvatar(
+                        radius: 40,
+                        backgroundColor: XColors.secondaryBG,
+                        backgroundImage: kIsWeb
+                            ? (_webBytes != null ? MemoryImage(_webBytes!) : null)
+                            : (_file != null ? FileImage(_file!) : null) as ImageProvider?,
+                        child: (_webBytes == null && _file == null)
+                            ? Icon(LucideIcons.camera, color: XColors.primary, size: 28)
+                            : null,
+                      ),
                     ),
-                  ),
-                  if (groupImage != null)
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: GestureDetector(
-                        onTap: removeGroupImage,
-                        child: CircleAvatar(
-                          radius: 12,
-                          backgroundColor: Colors.red,
-                          child: const Icon(
-                            Icons.close,
-                            size: 16,
-                            color: Colors.white,
+                    if (_webBytes != null || _file != null)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: _removeImage,
+                          child: const CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Colors.red,
+                            child: Icon(Icons.close, size: 16, color: Colors.white),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
+
               const SizedBox(height: 16),
 
-              // Group Name
               TextField(
-                controller: groupNameController,
+                controller: nameCtrl,
                 style: TextStyle(color: XColors.primaryText),
                 decoration: InputDecoration(
                   filled: true,
@@ -305,144 +288,101 @@ class _CreateGroupBottomSheetState extends State<CreateGroupBottomSheet> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Selected Buddies
-              if (selectedBuddies.isNotEmpty)
-                SizedBox(
-                  height: 80,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: selectedBuddies.length,
-                    itemBuilder: (context, index) {
-                      final buddy = selectedBuddies[index];
-                      return Stack(
-                        children: [
-                          Container(
-                            margin: const EdgeInsets.only(right: 12),
-                            child: Column(
-                              children: [
-                                CircleAvatar(
-                                  radius: 28,
-                                  backgroundColor: XColors.secondaryBG,
-                                  backgroundImage:
-                                      buddy['profilePic']!.isNotEmpty
-                                      ? AssetImage(buddy['profilePic']!)
-                                      : null,
-                                  child: buddy['profilePic']!.isEmpty
-                                      ? Icon(
-                                          LucideIcons.user_round,
-                                          color: XColors.primary.withOpacity(
-                                            0.5,
-                                          ),
-                                          size: 20,
-                                        )
-                                      : null,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  buddy['name']!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: XColors.primaryText,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Positioned(
-                            top: 0,
-                            right: 0,
-                            child: GestureDetector(
-                              onTap: () => removeBuddy(buddy),
-                              child: CircleAvatar(
-                                radius: 10,
-                                backgroundColor: Colors.red,
-                                child: const Icon(
-                                  Icons.close,
-                                  size: 12,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-
-              const SizedBox(height: 16),
-
-              // Add Buddies Button
-              TextButton(
-                onPressed: showAddBuddiesDialog,
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size(0, 0),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  splashFactory: NoSplash.splashFactory,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      LucideIcons.user_plus,
-                      color: XColors.primary,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Add Buddies',
-                      style: TextStyle(color: XColors.primary, fontSize: 13),
-                    ),
-                  ],
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
               ),
 
               const SizedBox(height: 14),
 
-              // Create Group Button
+              Text(
+                'Select Buddies',
+                style: TextStyle(
+                  color: XColors.primaryText,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: buddies.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.78,
+                ),
+                itemBuilder: (_, i) {
+                  final u = buddies[i];
+                  final selected = selectedIds.contains(u.id);
+
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (selected) {
+                          selectedIds.remove(u.id);
+                        } else {
+                          selectedIds.add(u.id);
+                        }
+                      });
+                    },
+                    child: Stack(
+                      children: [
+                        Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundColor: XColors.secondaryBG,
+                              backgroundImage: _avatarOf(u),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _nameOf(u),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: XColors.primaryText, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                        if (selected)
+                          Positioned(
+                            top: 0,
+                            right: 18,
+                            child: const CircleAvatar(
+                              radius: 9,
+                              backgroundColor: Colors.green,
+                              child: Icon(Icons.check, color: Colors.white, size: 14),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 14),
+
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: createGroup,
+                  onPressed: creating ? null : _createGroup,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: XColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text(
-                    'Create Group',
-                    style: TextStyle(fontSize: 13, color: Colors.white),
+                  child: Text(
+                    creating ? 'Creating...' : 'Create Group',
+                    style: const TextStyle(fontSize: 13, color: Colors.white),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
             ],
           ),
         ),
       ),
     );
   }
-}
-
-// To show the sheet
-void showCreateGroupSheet(BuildContext context) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => const CreateGroupBottomSheet(),
-  );
 }

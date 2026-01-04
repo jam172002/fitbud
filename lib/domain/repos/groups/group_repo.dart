@@ -12,6 +12,7 @@ import '../repo_exceptions.dart';
 class GroupRepo extends RepoBase {
   final FirebaseAuth auth;
   GroupRepo(super.db, this.auth);
+  String newGroupId() => col(FirestorePaths.groups).doc().id;
 
   String _uid() {
     final u = auth.currentUser;
@@ -27,19 +28,30 @@ class GroupRepo extends RepoBase {
   }
 
   Future<String> createGroup({
+    String? groupId,
     required String title,
     String description = '',
     String photoUrl = '',
     List<String> initialMemberUserIds = const [],
   }) async {
     final uid = _uid();
-    final groupRef = col(FirestorePaths.groups).doc();
-    final groupId = groupRef.id;
 
-    // Optional: create a conversation for this group (WhatsApp-style)
-    final convRef = doc('${FirestorePaths.conversations}/group_$groupId');
+    final groupRef = groupId == null
+        ? col(FirestorePaths.groups).doc()
+        : col(FirestorePaths.groups).doc(groupId);
+
+    final gid = groupRef.id;
+    final convId = 'group_$gid';
+    final convRef = doc('${FirestorePaths.conversations}/$convId');
+
+    // sanitize member list
+    final memberIds = <String>{
+      uid,
+      ...initialMemberUserIds.map((e) => e.trim()).where((e) => e.isNotEmpty),
+    };
 
     await db.runTransaction((tx) async {
+      // 1) Group
       tx.set(groupRef, {
         'title': title,
         'photoUrl': photoUrl,
@@ -47,63 +59,97 @@ class GroupRepo extends RepoBase {
         'createdByUserId': uid,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-        'memberCount': 1 + initialMemberUserIds.length,
-      });
+        'memberCount': memberIds.length,
+      }, SetOptions(merge: true));
 
-      // owner member
-      tx.set(doc('${FirestorePaths.groupMembers(groupId)}/$uid'), GroupMember(
-        id: uid,
-        groupId: groupId,
-        userId: uid,
-        role: GroupRole.owner,
-        joinedAt: DateTime.now(),
-      ).toMap()..addAll({'joinedAt': FieldValue.serverTimestamp()}));
+      // 2) Members
+      for (final userId in memberIds) {
+        final role = userId == uid ? GroupRole.owner : GroupRole.member;
 
-      // Add initial members directly (or invite instead)
-      for (final m in initialMemberUserIds.toSet()) {
-        if (m == uid) continue;
-        tx.set(doc('${FirestorePaths.groupMembers(groupId)}/$m'), GroupMember(
-          id: m,
-          groupId: groupId,
-          userId: m,
-          role: GroupRole.member,
-          joinedAt: DateTime.now(),
-        ).toMap()..addAll({'joinedAt': FieldValue.serverTimestamp()}));
+        tx.set(
+          doc('${FirestorePaths.groupMembers(gid)}/$userId'),
+          GroupMember(
+            id: userId,
+            groupId: gid,
+            userId: userId,
+            role: role,
+            joinedAt: DateTime.now(),
+          ).toMap()
+            ..addAll({'joinedAt': FieldValue.serverTimestamp()}),
+          SetOptions(merge: true),
+        );
       }
 
-      // Create group conversation
-      tx.set(convRef, Conversation(
-        id: convRef.id,
-        type: ConversationType.group,
-        title: title,
-        groupId: groupId,
-        createdByUserId: uid,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ).toMap()..addAll({
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'lastMessageId': '',
-        'lastMessagePreview': '',
-        'lastMessageAt': null,
-      }));
+      // 3) Conversation (group chat)
+      tx.set(
+        convRef,
+        Conversation(
+          id: convId,
+          type: ConversationType.group,
+          title: title,
+          groupId: gid,
+          createdByUserId: uid,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ).toMap()
+          ..addAll({
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'lastMessageId': '',
+            'lastMessagePreview': '',
+            'lastMessageAt': null,
+          }),
+        SetOptions(merge: true),
+      );
 
-      // Participants mirror group members
-      final all = <String>{uid, ...initialMemberUserIds};
-      for (final userId in all) {
+      // 4) Participants + 5) Inbox index (CRITICAL for production)
+      for (final userId in memberIds) {
+        // participants
         tx.set(
-          doc('${FirestorePaths.conversationParticipants(convRef.id)}/$userId'),
+          doc('${FirestorePaths.conversationParticipants(convId)}/$userId'),
           ConversationParticipant(
             id: userId,
-            conversationId: convRef.id,
+            conversationId: convId,
             userId: userId,
             joinedAt: DateTime.now(),
-          ).toMap()..addAll({'joinedAt': FieldValue.serverTimestamp()}),
+          ).toMap()
+            ..addAll({'joinedAt': FieldValue.serverTimestamp()}),
+          SetOptions(merge: true),
+        );
+
+        // inbox index => users/{uid}/inbox/{conversationId}
+        tx.set(
+          doc('${FirestorePaths.userInbox(userId)}/$convId'),
+          {
+            'conversationId': convId,
+            'type': ConversationType.group.name, // important for InboxScreen
+            'title': title,
+            'photoUrl': photoUrl,
+            'groupId': gid,
+            'lastMessageAt': null,
+            'lastMessagePreview': '',
+            'unreadCount': 0,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        // OPTIONAL: group memberships mirror
+        tx.set(
+          doc('${FirestorePaths.userGroupMemberships(userId)}/$gid'),
+          {
+            'groupId': gid,
+            'conversationId': convId,
+            'title': title,
+            'photoUrl': photoUrl,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
         );
       }
     });
 
-    return groupId;
+    return gid;
   }
 
   // ----- Members -----
