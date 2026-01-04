@@ -129,6 +129,7 @@ class GroupRepo extends RepoBase {
             'lastMessageAt': null,
             'lastMessagePreview': '',
             'unreadCount': 0,
+            'createdAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           },
           SetOptions(merge: true),

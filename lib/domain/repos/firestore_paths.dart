@@ -25,17 +25,22 @@ class FirestorePaths {
   static String groupInvites(String groupId) => '$groups/$groupId/invites';
 
   // Conversation subcollections
-  static String conversationParticipants(String conversationId) => '$conversations/$conversationId/participants';
-  static String conversationMessages(String conversationId) => '$conversations/$conversationId/messages';
+  static String conversationParticipants(String conversationId) =>
+      '$conversations/$conversationId/participants';
+  static String conversationMessages(String conversationId) =>
+      '$conversations/$conversationId/messages';
   static String messageReceipts(String conversationId, String messageId) =>
       '$conversations/$conversationId/messages/$messageId/receipts';
-  static String userInbox(String uid) => '$users/$uid/inbox'; // <--- IMPORTANT
+
+  // ✅ Canonical inbox path
+  static String userInbox(String uid) => '$users/$uid/inbox';
+
   static String userGroupMemberships(String uid) => '$users/$uid/groupMemberships';
+
+  // ✅ IMPORTANT: alias userConversations -> inbox (so your existing ChatRepo code keeps working)
+  static String userConversations(String uid) => userInbox(uid);
 
   // Session subcollections
   static String sessionInvites(String sessionId) => '$sessions/$sessionId/invites';
   static String sessionParticipants(String sessionId) => '$sessions/$sessionId/participants';
-
-  static String userConversations(String uid) =>
-      '$users/$uid/conversations';
 }
