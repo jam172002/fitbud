@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 
+import '../../../../domain/models/auth/user_address.dart';
+
 class LocationSelectorScreen extends StatefulWidget {
   const LocationSelectorScreen({super.key});
 
@@ -14,7 +16,15 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
   final TextEditingController searchController = TextEditingController();
 
   bool _loading = false;
-  String? _currentLocation;
+
+  // Current location info
+  String? _currentLocationLabel; // e.g. "Bahawalpur, Pakistan"
+  double? _currentLat;
+  double? _currentLng;
+
+  // Optional richer placemark strings
+  String? _currentLine1; // e.g. "Model Town B"
+  String? _currentLine2; // e.g. "Street 5"
 
   final List<String> _popularCities = const [
     'Lahore',
@@ -60,19 +70,33 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      final placemarks =
-      await placemarkFromCoordinates(pos.latitude, pos.longitude);
+      final placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
 
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
-        final city = place.locality ?? place.subAdministrativeArea;
-        final country = place.country;
 
-        if (city != null && country != null) {
-          setState(() {
-            _currentLocation = '$city, $country';
-          });
-        }
+        final city = (place.locality ?? place.subAdministrativeArea ?? '').trim();
+        final country = (place.country ?? '').trim();
+
+        // Try to extract a decent "line1"
+        final subLocality = (place.subLocality ?? '').trim();
+        final street = (place.street ?? '').trim();
+        final line1 = subLocality.isNotEmpty ? subLocality : street;
+
+        setState(() {
+          _currentLat = pos.latitude;
+          _currentLng = pos.longitude;
+          _currentLine1 = line1.isNotEmpty ? line1 : null;
+          _currentLine2 = null;
+
+          if (city.isNotEmpty && country.isNotEmpty) {
+            _currentLocationLabel = '$city, $country';
+          } else if (city.isNotEmpty) {
+            _currentLocationLabel = city;
+          } else if (country.isNotEmpty) {
+            _currentLocationLabel = country;
+          }
+        });
       }
     } catch (_) {
       // silently fail – user can pick manually
@@ -81,8 +105,62 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
     }
   }
 
-  void _selectLocation(String location) {
-    Get.back(result: location);
+  void _selectCityOnly(String city) {
+    final a = UserAddress(
+      id: 'temp',
+      city: city.trim(),
+      line1: city.trim(), // minimal fallback
+      line2: null,
+      lat: null,
+      lng: null,
+      isDefault: false,
+      label: null,
+    );
+    Get.back(result: a);
+  }
+
+  void _selectCurrentLocation() {
+    final label = (_currentLocationLabel ?? '').trim();
+    if (label.isEmpty) return;
+
+    // Use city part before comma as "city" if possible
+    final parts = label.split(',');
+    final city = parts.isNotEmpty ? parts.first.trim() : label;
+
+    final a = UserAddress(
+      id: 'temp',
+      city: city.isNotEmpty ? city : null,
+      line1: _currentLine1 ?? label,
+      line2: _currentLine2,
+      lat: _currentLat,
+      lng: _currentLng,
+      isDefault: false,
+      label: null,
+    );
+
+    Get.back(result: a);
+  }
+
+  void _selectFromSearch(String input) {
+    final v = input.trim();
+    if (v.isEmpty) return;
+
+    // If user types "Lahore, Pakistan" -> city = Lahore
+    final parts = v.split(',');
+    final city = parts.isNotEmpty ? parts.first.trim() : v;
+
+    final a = UserAddress(
+      id: 'temp',
+      city: city.isNotEmpty ? city : v,
+      line1: v,
+      line2: null,
+      lat: null,
+      lng: null,
+      isDefault: false,
+      label: null,
+    );
+
+    Get.back(result: a);
   }
 
   @override
@@ -111,11 +189,7 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onSubmitted: (val) {
-                if (val.trim().isNotEmpty) {
-                  _selectLocation(val.trim());
-                }
-              },
+              onSubmitted: (val) => _selectFromSearch(val),
             ),
           ),
 
@@ -127,12 +201,12 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
               padding: EdgeInsets.all(16),
               child: CircularProgressIndicator(),
             )
-          else if (_currentLocation != null)
+          else if (_currentLocationLabel != null)
             ListTile(
               leading: const Icon(Icons.my_location),
               title: const Text('Use current location'),
-              subtitle: Text(_currentLocation!),
-              onTap: () => _selectLocation(_currentLocation!),
+              subtitle: Text(_currentLocationLabel!),
+              onTap: _selectCurrentLocation,
             ),
 
           const Divider(),
@@ -146,7 +220,7 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
                 return ListTile(
                   leading: const Icon(Icons.location_city),
                   title: Text(city),
-                  onTap: () => _selectLocation(city),
+                  onTap: () => _selectCityOnly(city),
                 );
               },
             ),

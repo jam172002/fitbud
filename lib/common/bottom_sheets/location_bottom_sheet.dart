@@ -2,6 +2,7 @@ import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:get/get.dart';
+
 import '../../domain/models/auth/user_address.dart';
 import '../../domain/repos/repo_provider.dart';
 import '../../presentation/screens/authentication/screens/location_selector_screen.dart';
@@ -9,8 +10,8 @@ import '../../presentation/screens/authentication/screens/location_selector_scre
 Future<UserAddress?> showLocationBottomSheet(BuildContext context) {
   final authRepo = Get.find<Repos>().authRepo;
 
-
   String? selectedId;
+  bool saving = false; // prevents double taps while saving
 
   return showModalBottomSheet<UserAddress>(
     context: context,
@@ -23,6 +24,41 @@ Future<UserAddress?> showLocationBottomSheet(BuildContext context) {
       return SafeArea(
         child: StatefulBuilder(
           builder: (context, setState) {
+            Future<void> onAddLocation() async {
+              if (saving) return;
+
+              // 1) Pick new address from selector
+              final picked = await Get.to<UserAddress>(() => const LocationSelectorScreen());
+              if (picked == null) return;
+
+              try {
+                setState(() => saving = true);
+
+                // 2) Save in Firestore (enforces max 2, removes old non-default if 3rd)
+                final newId = await authRepo.addAddressEnforceMax2(
+                  address: picked,
+                );
+
+                // 3) Auto-select newly added address
+                setState(() => selectedId = newId);
+              } catch (e) {
+                // Optional: show error
+                Get.snackbar(
+                  'Error',
+                  'Failed to save address: $e',
+                  snackPosition: SnackPosition.BOTTOM,
+                );
+              } finally {
+                setState(() => saving = false);
+              }
+            }
+
+            Future<void> onConfirm() async {
+              final list = await authRepo.getMyAddressesOnce(limit: 50);
+              final selected = list.firstWhereOrNull((x) => x.id == selectedId);
+              Get.back(result: selected);
+            }
+
             return Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
               child: Column(
@@ -51,9 +87,7 @@ Future<UserAddress?> showLocationBottomSheet(BuildContext context) {
                       if (snap.connectionState == ConnectionState.waiting) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 18),
-                          child: Center(
-                            child: CircularProgressIndicator(),
-                          ),
+                          child: Center(child: CircularProgressIndicator()),
                         );
                       }
 
@@ -68,6 +102,7 @@ Future<UserAddress?> showLocationBottomSheet(BuildContext context) {
                       }
 
                       final list = snap.data ?? const <UserAddress>[];
+
                       if (list.isEmpty) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -82,14 +117,24 @@ Future<UserAddress?> showLocationBottomSheet(BuildContext context) {
                                 ),
                               ),
                               const SizedBox(height: 10),
-                              _AddLocationLink(),
+                              GestureDetector(
+                                onTap: saving ? null : onAddLocation,
+                                child: Text(
+                                  saving ? 'Saving...' : 'Add Location',
+                                  style: const TextStyle(color: Colors.blue),
+                                ),
+                              ),
                             ],
                           ),
                         );
                       }
 
-                      // Auto-select default (or first) once
-                      selectedId ??= (list.firstWhereOrNull((a) => a.isDefault)?.id) ?? list.first.id;
+                      // Ensure selectedId stays valid (if a doc got deleted on 3rd add)
+                      final ids = list.map((e) => e.id).toSet();
+                      if (selectedId == null || !ids.contains(selectedId)) {
+                        selectedId =
+                            (list.firstWhereOrNull((a) => a.isDefault)?.id) ?? list.first.id;
+                      }
 
                       return Column(
                         children: [
@@ -106,7 +151,13 @@ Future<UserAddress?> showLocationBottomSheet(BuildContext context) {
                             );
                           }),
                           const SizedBox(height: 4),
-                          _AddLocationLink(),
+                          GestureDetector(
+                            onTap: saving ? null : onAddLocation,
+                            child: Text(
+                              saving ? 'Saving...' : 'Add Location',
+                              style: const TextStyle(color: Colors.blue),
+                            ),
+                          ),
                         ],
                       );
                     },
@@ -114,17 +165,10 @@ Future<UserAddress?> showLocationBottomSheet(BuildContext context) {
 
                   const SizedBox(height: 20),
 
-                  // Confirm button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () async {
-                        // Fetch selected address from current stream snapshot is not accessible here directly,
-                        // so do a one-time fetch. (Fast and safe.)
-                        final list = await authRepo.getMyAddressesOnce(limit: 50);
-                        final selected = list.firstWhereOrNull((x) => x.id == selectedId);
-                        Get.back(result: selected);
-                      },
+                      onPressed: saving ? null : onConfirm,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: XColors.primary,
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -132,9 +176,9 @@ Future<UserAddress?> showLocationBottomSheet(BuildContext context) {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        "Confirm Selection",
-                        style: TextStyle(fontSize: 14, color: Colors.white),
+                      child: Text(
+                        saving ? "Please wait..." : "Confirm Selection",
+                        style: const TextStyle(fontSize: 14, color: Colors.white),
                       ),
                     ),
                   ),
@@ -148,23 +192,7 @@ Future<UserAddress?> showLocationBottomSheet(BuildContext context) {
   );
 }
 
-class _AddLocationLink extends StatelessWidget {
-  const _AddLocationLink();
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Get.to(() => LocationSelectorScreen());
-      },
-      child: const Text(
-        'Add Location',
-        style: TextStyle(color: Colors.blue),
-      ),
-    );
-  }
-}
-
+// --- same tile as yours ---
 class _LocationTile extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -232,5 +260,15 @@ class _LocationTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Iterable helper (if you don't already have it)
+extension FirstWhereOrNullExt<T> on Iterable<T> {
+  T? firstWhereOrNull(bool Function(T) test) {
+    for (final x in this) {
+      if (test(x)) return x;
+    }
+    return null;
   }
 }

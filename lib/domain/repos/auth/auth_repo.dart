@@ -126,5 +126,82 @@ class AuthRepo extends RepoBase {
     return q.docs.map((d) => UserAddress.fromDoc(d)).toList();
   }
 
+  Future<String> addAddressEnforceMax2({
+    required UserAddress address,
+    bool makeDefaultIfFirst = true,
+  }) async {
+    final uid = requireUid();
+    final colRef = db.collection(FirestorePaths.userAddresses(uid));
+
+    // 1) Fetch existing docs OUTSIDE transaction (older plugin limitation)
+    final pre = await colRef
+        .orderBy('isDefault', descending: true)
+        .orderBy('updatedAt', descending: true)
+        .limit(10)
+        .get();
+
+    final refs = pre.docs.map((d) => d.reference).toList();
+
+    // 2) Now transaction reads ONLY DocumentReferences
+    return db.runTransaction((tx) async {
+      // Read snapshots using tx.get(docRef)
+      final snaps = <DocumentSnapshot<Map<String, dynamic>>>[];
+      for (final r in refs) {
+        final s = await tx.get(r);
+        if (s.exists) snaps.add(s);
+      }
+
+      // Convert to models
+      final existing = snaps.map((s) => UserAddress.fromDoc(s)).toList();
+
+      final now = FieldValue.serverTimestamp();
+      final shouldBeDefault = existing.isEmpty && makeDefaultIfFirst;
+
+      // Helper: pick oldest by updatedAt/createdAt (null-safe)
+      UserAddress pickOldest(List<UserAddress> list) {
+        int score(UserAddress a) {
+          final u = a.updatedAt?.millisecondsSinceEpoch ?? 0;
+          final c = a.createdAt?.millisecondsSinceEpoch ?? 0;
+          return (u != 0 ? u : c);
+        }
+
+        final copy = [...list];
+        copy.sort((a, b) => score(a).compareTo(score(b)));
+        return copy.first;
+      }
+
+      // 3) If already 2 → remove one (prefer non-default)
+      if (existing.length >= 2) {
+        final nonDefault = existing.where((a) => a.isDefault == false).toList();
+        final toDelete = nonDefault.isNotEmpty ? pickOldest(nonDefault) : pickOldest(existing);
+        tx.delete(colRef.doc(toDelete.id));
+      }
+
+      // 4) If first address should be default → set others false (mostly no-op)
+      if (shouldBeDefault) {
+        for (final s in snaps) {
+          tx.update(s.reference, {
+            'isDefault': false,
+            'updatedAt': now,
+          });
+        }
+      }
+
+      // 5) Insert new address
+      final newDoc = colRef.doc();
+      tx.set(
+        newDoc,
+        {
+          ...address.toMap(),
+          'isDefault': shouldBeDefault ? true : (address.isDefault),
+          'createdAt': now,
+          'updatedAt': now,
+        },
+        SetOptions(merge: true),
+      );
+
+      return newDoc.id;
+    });
+  }
 
 }
