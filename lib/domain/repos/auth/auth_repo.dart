@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/models/auth/user_settings.dart';
+import '../../models/auth/user_address.dart';
 import '../firestore_paths.dart';
 import '../firestore_repo_base.dart';
 import '../repo_exceptions.dart';
@@ -98,5 +99,32 @@ class AuthRepo extends RepoBase {
 
     return await ref.getDownloadURL();
   }
+
+  // ---- Addresses (users/{uid}/addresses) ----
+
+  Stream<List<UserAddress>> watchMyAddresses({int limit = 50}) {
+    final uid = requireUid();
+    return db
+        .collection(FirestorePaths.userAddresses(uid))
+        .orderBy('isDefault', descending: true)
+        .orderBy('updatedAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((q) => q.docs.map((d) => UserAddress.fromDoc(d)).toList());
+  }
+
+  /// Optional: fetch once
+  Future<List<UserAddress>> getMyAddressesOnce({int limit = 50}) async {
+    final uid = requireUid();
+    final q = await db
+        .collection(FirestorePaths.userAddresses(uid))
+        .orderBy('isDefault', descending: true)
+        .orderBy('updatedAt', descending: true)
+        .limit(limit)
+        .get();
+
+    return q.docs.map((d) => UserAddress.fromDoc(d)).toList();
+  }
+
 
 }

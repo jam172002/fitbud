@@ -108,18 +108,22 @@ class _HomeScreenState extends State<HomeScreen> {
             name: (me?.displayName?.trim().isNotEmpty == true)
                 ? me!.displayName!
                 : 'FitBud User',
-            location: locationController.currentLocation.value,
-            country:
-            (me?.city?.trim().isNotEmpty == true) ? me!.city! : 'Pakistan',
+
+            location: locationController.locationLabel,
+
+            country: locationController.cityLabel,
+
             imagePath: (me?.photoUrl?.trim().isNotEmpty == true)
                 ? me!.photoUrl!
                 : 'assets/images/profile.png',
+
             onLocationTap: () async {
               final pickedLocation = await showLocationBottomSheet(context);
               if (pickedLocation != null) {
                 locationController.updateLocation(pickedLocation);
               }
             },
+
             onScanTap: () => Get.to(() => QRScanScreen()),
             onNotificationTap: () => Get.to(() => NotificationsScreen()),
             hasPremium: home.hasPremium,

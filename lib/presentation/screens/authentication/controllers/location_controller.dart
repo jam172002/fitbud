@@ -1,11 +1,24 @@
+
 import 'package:get/get.dart';
 
-class LocationController extends GetxController {
-  // Observable variable
-  RxString currentLocation = "Model town, Bahawalpur".obs;
+import '../../../../domain/models/auth/user_address.dart';
 
-  // Function to update location
-  void updateLocation(String newLocation) {
-    currentLocation.value = newLocation;
+class LocationController extends GetxController {
+  final Rxn<UserAddress> currentAddress = Rxn<UserAddress>();
+
+  /// Derived display string for UI
+  String get locationLabel {
+    final a = currentAddress.value;
+    if (a == null) return 'Select Location';
+    return a.subtitle; // or "${a.line1}, ${a.city}"
+  }
+
+  String get cityLabel {
+    final a = currentAddress.value;
+    return (a?.city?.trim().isNotEmpty == true) ? a!.city! : 'Pakistan';
+  }
+
+  void updateLocation(UserAddress address) {
+    currentAddress.value = address;
   }
 }

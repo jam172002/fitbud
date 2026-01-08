@@ -32,15 +32,18 @@ class FirestorePaths {
   static String messageReceipts(String conversationId, String messageId) =>
       '$conversations/$conversationId/messages/$messageId/receipts';
 
-  // ✅ Canonical inbox path
+  // Canonical inbox path
   static String userInbox(String uid) => '$users/$uid/inbox';
 
   static String userGroupMemberships(String uid) => '$users/$uid/groupMemberships';
 
-  // ✅ IMPORTANT: alias userConversations -> inbox (so your existing ChatRepo code keeps working)
+  // IMPORTANT: alias userConversations -> inbox (so your existing ChatRepo code keeps working)
   static String userConversations(String uid) => userInbox(uid);
 
   // Session subcollections
   static String sessionInvites(String sessionId) => '$sessions/$sessionId/invites';
   static String sessionParticipants(String sessionId) => '$sessions/$sessionId/participants';
+
+  // addresses subcollection
+  static String userAddresses(String uid) => 'users/$uid/addresses';
 }
