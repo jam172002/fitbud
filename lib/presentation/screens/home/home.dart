@@ -182,8 +182,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           final a = cats[index];
 
                           return CategoryHomeIcon(
-                            // IMPORTANT:
-                            // Update CategoryHomeIcon to support network iconUrl (see next section)
                             iconPath: a.iconUrl.isNotEmpty ? a.iconUrl : 'assets/icons/badminton.png',
                             title: a.name,
                             onTap: () {

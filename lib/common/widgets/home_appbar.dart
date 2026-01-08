@@ -30,14 +30,21 @@ class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => const Size.fromHeight(95);
 
-  bool isValidAsset(String? path) {
+  bool isValidPath(String? path) {
     if (path == null) return false;
     if (path.trim().isEmpty) return false;
     return true;
   }
 
+  bool _isNetworkUrl(String? path) {
+    final p = (path ?? '').trim().toLowerCase();
+    return p.startsWith('http://') || p.startsWith('https://');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final img = (imagePath ?? '').trim();
+
     return SafeArea(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -53,13 +60,39 @@ class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
               onTap: onProfileTap,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: isValidAsset(imagePath)
-                    ? Image.asset(
-                        imagePath!,
-                        height: 50,
-                        width: 50,
-                        fit: BoxFit.cover,
-                      )
+                child: isValidPath(img)
+                    ? (_isNetworkUrl(img)
+                    ? Image.network(
+                  img,
+                  height: 50,
+                  width: 50,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _defaultProfileBox(),
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return SizedBox(
+                      height: 50,
+                      width: 50,
+                      child: Center(
+                        child: SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: XColors.primary.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                )
+                    : Image.asset(
+                  img,
+                  height: 50,
+                  width: 50,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _defaultProfileBox(),
+                ))
                     : _defaultProfileBox(),
               ),
             ),
@@ -74,19 +107,22 @@ class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                 children: [
                   Row(
                     children: [
-                      //? Name
-                      Text(
-                        name,
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                      // Name (kept same behavior; ellipsis already here)
+                      Flexible(
+                        child: Text(
+                          name,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                      SizedBox(width: 8),
-                      //? Tag
+                      const SizedBox(width: 8),
+
+                      // Tag
                       if (hasPremium)
                         Text(
                           'Pro',
@@ -97,7 +133,7 @@ class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                         ),
                     ],
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   GestureDetector(
                     onTap: onLocationTap,
                     child: Row(
@@ -110,7 +146,7 @@ class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                         ),
                         const SizedBox(width: 4),
 
-                        // Location Text
+                        // Location Text (kept; already Flexible + ellipsis)
                         Flexible(
                           child: Text(
                             "$location, $country",
@@ -134,9 +170,12 @@ class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ],
               ),
             ),
-            SizedBox(width: 8),
+
+            const SizedBox(width: 8),
+
             // ---------------- NOTIFICATION + MESSAGE ----------------
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 GestureDetector(
                   onTap: onNotificationTap,
@@ -146,7 +185,7 @@ class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     size: 20,
                   ),
                 ),
-                if (hasPremium) SizedBox(width: 14),
+                if (hasPremium) const SizedBox(width: 14),
                 if (hasPremium)
                   GestureDetector(
                     onTap: onScanTap,
