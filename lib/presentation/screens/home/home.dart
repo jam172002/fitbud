@@ -120,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onLocationTap: () async {
               final pickedLocation = await showLocationBottomSheet(context);
               if (pickedLocation != null) {
-                locationController.updateLocation(pickedLocation);
+                await locationController.selectAndPersist(pickedLocation);
               }
             },
 

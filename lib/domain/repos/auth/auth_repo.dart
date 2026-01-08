@@ -204,4 +204,20 @@ class AuthRepo extends RepoBase {
     });
   }
 
+  Stream<String?> watchSelectedAddressId() {
+    return watchMySettings().map((s) => s?.selectedAddressId);
+  }
+
+  Future<void> setSelectedAddressId(String addressId) async {
+    final uid = requireUid();
+    await doc(FirestorePaths.userSettings(uid)).set(
+      {
+        'selectedAddressId': addressId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+
 }

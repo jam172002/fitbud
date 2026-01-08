@@ -12,6 +12,10 @@ class UserSettings implements FirestoreModel {
   final bool allowGroupInvites;
   final String language;
   final String themeMode; // light/dark/system
+
+  /// NEW: selected address doc id from users/{uid}/addresses/{addressId}
+  final String? selectedAddressId;
+
   final DateTime? updatedAt;
 
   const UserSettings({
@@ -23,6 +27,7 @@ class UserSettings implements FirestoreModel {
     this.allowGroupInvites = true,
     this.language = 'en',
     this.themeMode = 'system',
+    this.selectedAddressId,
     this.updatedAt,
   });
 
@@ -37,6 +42,7 @@ class UserSettings implements FirestoreModel {
       allowGroupInvites: FirestoreModel.readBool(d['allowGroupInvites'], fallback: true),
       language: FirestoreModel.readString(d['language'], fallback: 'en'),
       themeMode: FirestoreModel.readString(d['themeMode'], fallback: 'system'),
+      selectedAddressId: FirestoreModel.readString(d['selectedAddressId'], fallback: ''),
       updatedAt: FirestoreModel.readDate(d['updatedAt']),
     );
   }
@@ -51,6 +57,7 @@ class UserSettings implements FirestoreModel {
       'allowGroupInvites': allowGroupInvites,
       'language': language,
       'themeMode': themeMode,
+      'selectedAddressId': selectedAddressId, // NEW
       'updatedAt': FirestoreModel.ts(updatedAt),
     };
   }
