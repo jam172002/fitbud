@@ -33,6 +33,8 @@ class UserSettings implements FirestoreModel {
 
   static UserSettings fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
+    final sel = FirestoreModel.readString(d['selectedAddressId'], fallback: '').trim();
+
     return UserSettings(
       id: doc.id,
       pushEnabled: FirestoreModel.readBool(d['pushEnabled'], fallback: true),
@@ -42,10 +44,11 @@ class UserSettings implements FirestoreModel {
       allowGroupInvites: FirestoreModel.readBool(d['allowGroupInvites'], fallback: true),
       language: FirestoreModel.readString(d['language'], fallback: 'en'),
       themeMode: FirestoreModel.readString(d['themeMode'], fallback: 'system'),
-      selectedAddressId: FirestoreModel.readString(d['selectedAddressId'], fallback: ''),
+      selectedAddressId: sel.isEmpty ? null : sel,
       updatedAt: FirestoreModel.readDate(d['updatedAt']),
     );
   }
+
 
   @override
   Map<String, dynamic> toMap() {

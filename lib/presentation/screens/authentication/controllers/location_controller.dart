@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 
 import '../../../../domain/models/auth/user_address.dart';
@@ -7,16 +8,17 @@ import '../../../../domain/repos/repo_provider.dart';
 class LocationController extends GetxController {
   final Rxn<UserAddress> currentAddress = Rxn<UserAddress>();
 
-  // Dependencies
   final _authRepo = Get.find<Repos>().authRepo;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  StreamSubscription? _addrSub;
-  StreamSubscription? _selSub;
+  StreamSubscription<User?>? _authSub;
+  StreamSubscription<List<UserAddress>>? _addrSub;
+  StreamSubscription<String?>? _selSub;
 
   List<UserAddress> _latestAddresses = const <UserAddress>[];
   String? _selectedAddressId;
+  String? _boundUid;
 
-  /// Derived display string for UI
   String get locationLabel {
     final a = currentAddress.value;
     if (a == null) return 'Select Location';
@@ -32,17 +34,50 @@ class LocationController extends GetxController {
   void onInit() {
     super.onInit();
 
-    // 1) Listen addresses list
+    // Wait for auth to be ready, then bind streams
+    _authSub = _auth.authStateChanges().listen((u) {
+      final uid = u?.uid;
+
+      // Signed out
+      if (uid == null) {
+        _unbindStreams();
+        currentAddress.value = null;
+        return;
+      }
+
+      // Signed in and not yet bound or changed user
+      if (_boundUid != uid) {
+        _bindStreams(uid);
+      }
+    });
+  }
+
+  void _bindStreams(String uid) {
+    _unbindStreams();
+    _boundUid = uid;
+
+    // Addresses stream (safe now because user is definitely signed in)
     _addrSub = _authRepo.watchMyAddresses(limit: 50).listen((list) {
       _latestAddresses = list;
       _applySelection();
     });
 
-    // 2) Listen selectedAddressId from settings
+    // Selected address id from settings
     _selSub = _authRepo.watchSelectedAddressId().listen((id) {
-      _selectedAddressId = (id?.trim().isNotEmpty == true) ? id!.trim() : null;
+      final v = (id ?? '').trim();
+      _selectedAddressId = v.isEmpty ? null : v;
       _applySelection();
     });
+  }
+
+  void _unbindStreams() {
+    _addrSub?.cancel();
+    _selSub?.cancel();
+    _addrSub = null;
+    _selSub = null;
+    _latestAddresses = const <UserAddress>[];
+    _selectedAddressId = null;
+    _boundUid = null;
   }
 
   void _applySelection() {
@@ -53,43 +88,49 @@ class LocationController extends GetxController {
 
     UserAddress? selected;
 
-    // A) pick by selectedAddressId
+    // 1) Try selectedAddressId
     if (_selectedAddressId != null) {
       selected = _latestAddresses.firstWhereOrNull((a) => a.id == _selectedAddressId);
     }
 
-    // B) else pick default
+    // 2) Else default
     selected ??= _latestAddresses.firstWhereOrNull((a) => a.isDefault);
 
-    // C) else pick first
+    // 3) Else first
     selected ??= _latestAddresses.first;
 
     currentAddress.value = selected;
   }
 
-  /// Call this when user selects/confirm an address from bottom sheet
-  Future<void> selectAndPersist(UserAddress address) async {
-    currentAddress.value = address; // immediate UI update
+  /// Persist selected address so it survives app restart
+  Future<void> selectAndPersist(UserAddress address, {bool makeDefault = true}) async {
+    currentAddress.value = address;
     _selectedAddressId = address.id;
 
+    // Persist selection
     await _authRepo.setSelectedAddressId(address.id);
+
+    // OPTIONAL: Also set as default in addresses collection
+    if (makeDefault) {
+      await _authRepo.setDefaultAddress(address.id);
+    }
   }
 
-  /// Keep for backward compatibility (if other screens call updateLocation)
-  /// Now it also persists selection.
+
+
+  // Backwards compatible (if you call updateLocation anywhere else)
   Future<void> updateLocation(UserAddress address) async {
     await selectAndPersist(address);
   }
 
   @override
   void onClose() {
-    _addrSub?.cancel();
-    _selSub?.cancel();
+    _authSub?.cancel();
+    _unbindStreams();
     super.onClose();
   }
 }
 
-// Helper extension (if not already in your project)
 extension FirstWhereOrNullExt<T> on Iterable<T> {
   T? firstWhereOrNull(bool Function(T) test) {
     for (final x in this) {

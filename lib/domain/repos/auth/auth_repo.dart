@@ -219,5 +219,23 @@ class AuthRepo extends RepoBase {
     );
   }
 
+  Future<void> setDefaultAddress(String addressId) async {
+    final uid = requireUid();
+    final colRef = db.collection(FirestorePaths.userAddresses(uid));
+    final now = FieldValue.serverTimestamp();
+
+    final q = await colRef.limit(50).get();
+    final batch = db.batch();
+
+    for (final d in q.docs) {
+      batch.update(d.reference, {
+        'isDefault': d.id == addressId,
+        'updatedAt': now,
+      });
+    }
+
+    await batch.commit();
+  }
+
 
 }

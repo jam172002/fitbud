@@ -118,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 : 'assets/images/profile.png',
 
             onLocationTap: () async {
-              final pickedLocation = await showLocationBottomSheet(context);
+                final pickedLocation = await showLocationBottomSheet(context);
               if (pickedLocation != null) {
                 await locationController.selectAndPersist(pickedLocation);
               }
