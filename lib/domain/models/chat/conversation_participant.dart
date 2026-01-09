@@ -3,7 +3,8 @@ import '../common/firestore_model.dart';
 
 class ConversationParticipant implements FirestoreModel {
   @override
-  final String id; // usually uid
+  final String id;
+  final DateTime? lastDeliveredAt;
 
   final String conversationId;
   final String userId;
@@ -18,6 +19,7 @@ class ConversationParticipant implements FirestoreModel {
     required this.userId,
     this.joinedAt,
     this.lastReadAt,
+    this.lastDeliveredAt,
     this.isMuted = false,
     this.mutedUntil,
   });
@@ -34,6 +36,7 @@ class ConversationParticipant implements FirestoreModel {
       joinedAt: FirestoreModel.readDate(d['joinedAt']),
       lastReadAt: FirestoreModel.readDate(d['lastReadAt']),
       isMuted: FirestoreModel.readBool(d['isMuted']),
+      lastDeliveredAt: FirestoreModel.readDate(d['lastDeliveredAt']),
       mutedUntil: FirestoreModel.readDate(d['mutedUntil']),
     );
   }
@@ -44,6 +47,7 @@ class ConversationParticipant implements FirestoreModel {
       'userId': userId,
       'joinedAt': FirestoreModel.ts(joinedAt),
       'lastReadAt': FirestoreModel.ts(lastReadAt),
+      'lastDeliveredAt': FirestoreModel.ts(lastDeliveredAt),
       'isMuted': isMuted,
       'mutedUntil': FirestoreModel.ts(mutedUntil),
     };

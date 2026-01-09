@@ -30,10 +30,10 @@ class ChatRepo extends RepoBase {
   // -----------------------------
   // Helpers
   // -----------------------------
-  String _sortedPairKey(String a, String b) {
+/*  String _sortedPairKey(String a, String b) {
     final s = [a, b]..sort();
     return '${s[0]}_${s[1]}';
-  }
+  }*/
 
   String _directConversationId(String a, String b) {
     final s = [a, b]..sort();
@@ -284,6 +284,8 @@ class ChatRepo extends RepoBase {
     double? lat,
     double? lng,
     String replyToMessageId = '',
+    String clientMessageId = '',
+    DateTime? clientCreatedAt,
   }) async {
     final uid = _uid();
     final cid = _cleanId(conversationId);
@@ -310,6 +312,9 @@ class ChatRepo extends RepoBase {
         'lng': lng,
         'replyToMessageId': replyToMessageId,
         'createdAt': now,
+        'clientMessageId': clientMessageId,
+        'clientCreatedAt': clientCreatedAt == null ? null : Timestamp.fromDate(clientCreatedAt),
+
         'isDeleted': false,
         'deliveryState': DeliveryState.sent.name,
       });
@@ -429,4 +434,19 @@ class ChatRepo extends RepoBase {
 
     await batch.commit();
   }
+
+  Future<void> markConversationDelivered(String conversationId) async {
+    final uid = _uid();
+    final cid = _cleanId(conversationId);
+    if (cid.isEmpty) return;
+
+    await doc('${FirestorePaths.conversationParticipants(cid)}/$uid').set(
+      {
+        'userId': uid,
+        'lastDeliveredAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
 }

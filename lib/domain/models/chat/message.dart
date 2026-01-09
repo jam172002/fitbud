@@ -32,7 +32,10 @@ class Message implements FirestoreModel {
 
   final DateTime? createdAt;
   final bool isDeleted;
-  final DeliveryState deliveryState; // coarse/optional
+  final DeliveryState deliveryState;
+
+  final String clientMessageId;
+  final DateTime? clientCreatedAt;
 
   const Message({
     required this.id,
@@ -46,6 +49,8 @@ class Message implements FirestoreModel {
     this.lng,
     this.replyToMessageId = '',
     this.createdAt,
+    this.clientMessageId = '',
+    this.clientCreatedAt,
     this.isDeleted = false,
     this.deliveryState = DeliveryState.sent,
   });
@@ -64,6 +69,8 @@ class Message implements FirestoreModel {
       lng: (d['lng'] is num) ? (d['lng'] as num).toDouble() : null,
       replyToMessageId: FirestoreModel.readString(d['replyToMessageId']),
       createdAt: FirestoreModel.readDate(d['createdAt']),
+      clientMessageId: FirestoreModel.readString(d['clientMessageId']),
+      clientCreatedAt: FirestoreModel.readDate(d['clientCreatedAt']),
       isDeleted: FirestoreModel.readBool(d['isDeleted']),
       deliveryState: deliveryStateFrom(FirestoreModel.readString(d['deliveryState'], fallback: 'sent')),
     );
@@ -81,6 +88,8 @@ class Message implements FirestoreModel {
       'lng': lng,
       'replyToMessageId': replyToMessageId,
       'createdAt': FirestoreModel.ts(createdAt),
+      'clientMessageId': clientMessageId,
+      'clientCreatedAt': FirestoreModel.ts(clientCreatedAt),
       'isDeleted': isDeleted,
       'deliveryState': deliveryState.name,
     };
