@@ -6,6 +6,8 @@ import 'package:get/get.dart';
 import '../../../common/appbar/common_appbar.dart';
 import '../../../common/widgets/all_session_screen_card.dart';
 import '../../../common/widgets/no_data_illustrations.dart';
+import '../../../domain/models/sessions/session_invite.dart';
+import '../../../domain/repos/repo_provider.dart';
 import '../profile/buddy_profile_screen.dart';
 
 class AllSessionInvitesScreen extends StatefulWidget {
@@ -18,58 +20,37 @@ class AllSessionInvitesScreen extends StatefulWidget {
 class _AllSessionInvitesScreenState extends State<AllSessionInvitesScreen> {
   String _selectedFilter = 'Pending';
 
-  // Dummy data for each status
-  // IMPORTANT: include buddyUserId (required by BuddyProfileScreen) + optional conversationId
-  final List<Map<String, dynamic>> _pendingList = List.generate(
-    5,
-        (index) => {
-      'title': 'Pending $index',
-      'status': 'Pending',
-      'grouped': index % 2 == 0,
-      'sentTo': 10 + index,
-      'buddyUserId': 'buddy_user_$index',
-      'conversationId': 'conv_pending_$index',
-    },
-  );
+  Repos get repos => Get.find<Repos>();
 
-  final List<Map<String, dynamic>> _acceptedList = List.generate(
-    3,
-        (index) => {
-      'title': 'Accepted $index',
-      'status': 'Accepted',
-      'grouped': index % 2 == 1,
-      'sentTo': 5 + index,
-      'buddyUserId': 'buddy_user_acc_$index',
-      'conversationId': 'conv_accepted_$index',
-    },
-  );
-
-  final List<Map<String, dynamic>> _rejectedList = List.generate(
-    2,
-        (index) => {
-      'title': 'Rejected $index',
-      'status': 'Rejected',
-      'grouped': false,
-      'sentTo': 0,
-      'buddyUserId': 'buddy_user_rej_$index',
-      'conversationId': 'conv_rejected_$index',
-    },
-  );
-
-  List<Map<String, dynamic>> get _currentList {
-    switch (_selectedFilter) {
+  InviteStatus _statusFromUi(String filter) {
+    switch (filter) {
       case 'Accepted':
-        return _acceptedList;
+        return InviteStatus.accepted;
       case 'Rejected':
-        return _rejectedList;
+        return InviteStatus.declined;
       case 'Pending':
       default:
-        return _pendingList;
+        return InviteStatus.pending;
+    }
+  }
+
+  String _uiStatusFromInvite(InviteStatus s) {
+    switch (s) {
+      case InviteStatus.accepted:
+        return 'Accepted';
+      case InviteStatus.declined:
+      case InviteStatus.cancelled:
+        return 'Rejected';
+      case InviteStatus.pending:
+      default:
+        return 'Pending';
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final status = _statusFromUi(_selectedFilter);
+
     return Scaffold(
       appBar: XAppBar(title: 'Session Invites'),
       body: SafeArea(
@@ -87,43 +68,79 @@ class _AllSessionInvitesScreenState extends State<AllSessionInvitesScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+
               Expanded(
-                child: _currentList.isEmpty
-                    ? const NoDataIllustration(
-                  imagePath: 'assets/images/no-sessions.png',
-                  message: 'No session invites found',
-                )
-                    : ListView.builder(
-                  itemCount: _currentList.length,
-                  itemBuilder: (context, index) {
-                    final item = _currentList[index];
+                child: StreamBuilder<List<SessionInvite>>(
+                  stream: repos.sessionRepo.watchMySessionInvitesByStatus(
+                    status: status,
+                    limit: 100,
+                  ),
+                  builder: (context, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                    final String buddyUserId =
-                    (item['buddyUserId'] ?? '').toString();
-                    final String? conversationId =
-                    (item['conversationId']?.toString().isNotEmpty == true)
-                        ? item['conversationId'].toString()
-                        : null;
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 22),
-                      child: AllSessionsScreenCard(
-                        title: item['title'],
-                        status: item['status'],
-                        isGrouped: item['grouped'],
-                        sentTo: item['sentTo'],
-                        nameOnTap: () {
-                          if (buddyUserId.isEmpty) return;
-
-                          Get.to(
-                                () => BuddyProfileScreen(
-                              buddyUserId: buddyUserId,
-                              scenario: BuddyScenario.existingBuddy,
-                              conversationId: conversationId,
+                    if (snap.hasError) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'Failed to load session invites.\n${snap.error}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: XColors.bodyText.withValues(alpha: .7),
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    final list = snap.data ?? const <SessionInvite>[];
+
+                    if (list.isEmpty) {
+                      return const NoDataIllustration(
+                        imagePath: 'assets/images/no-sessions.png',
+                        message: 'No session invites found',
+                      );
+                    }
+
+                    return ListView.builder(
+                      itemCount: list.length,
+                      itemBuilder: (context, index) {
+                        final inv = list[index];
+
+                        // buddyUserId = who invited me (invitedByUserId)
+                        final buddyUserId = (inv.invitedByUserId).trim();
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 22),
+                          child: AllSessionsScreenCard(
+                            // Keep the UI; just populate from Firestore snapshot fields
+                            title: (inv.sessionCategory?.trim().isNotEmpty == true)
+                                ? inv.sessionCategory!.trim()
+                                : 'Session',
+                            status: _uiStatusFromInvite(inv.status),
+                            isGrouped: false,
+                            sentTo: 0,
+
+                            // IMPORTANT: if you updated card to accept invite object, pass it
+                            invite: inv,
+
+                            nameOnTap: () {
+                              if (buddyUserId.isEmpty) return;
+
+                              Get.to(
+                                    () => BuddyProfileScreen(
+                                  buddyUserId: buddyUserId,
+                                  scenario: BuddyScenario.existingBuddy,
+                                  // conversationId not part of session invite model
+                                  conversationId: null,
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
@@ -141,16 +158,13 @@ class _AllSessionInvitesScreenState extends State<AllSessionInvitesScreen> {
 
     switch (label) {
       case 'Pending':
-        bgColor =
-        isSelected ? Colors.deepOrange : Colors.deepOrange.withOpacity(0.2);
+        bgColor = isSelected ? Colors.deepOrange : Colors.deepOrange.withValues(alpha: 0.2);
         break;
       case 'Accepted':
-        bgColor =
-        isSelected ? XColors.primary : XColors.primary.withOpacity(0.2);
+        bgColor = isSelected ? XColors.primary : XColors.primary.withValues(alpha:0.2);
         break;
       case 'Rejected':
-        bgColor =
-        isSelected ? XColors.danger : XColors.danger.withOpacity(0.2);
+        bgColor = isSelected ? XColors.danger : XColors.danger.withValues(alpha:0.2);
         break;
       default:
         bgColor = XColors.bodyText;

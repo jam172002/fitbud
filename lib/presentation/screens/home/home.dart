@@ -332,31 +332,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           final inv = home.invites[index];
 
                           return HomeSessionInviteCard(
-                            category: (inv.sessionCategory?.isNotEmpty == true)
-                                ? inv.sessionCategory!
-                                : 'Session',
-                            invitedBy: (inv.invitedByName?.isNotEmpty == true)
-                                ? inv.invitedByName!
-                                : 'Someone',
+                            category: (inv.sessionCategory?.isNotEmpty == true) ? inv.sessionCategory! : 'Session',
+                            invitedBy: (inv.invitedByName?.isNotEmpty == true) ? inv.invitedByName! : 'Someone',
                             dateTime: inv.sessionDateTime?.toString() ?? '',
-                            location: (inv.sessionLocationText?.isNotEmpty == true)
-                                ? inv.sessionLocationText!
-                                : '',
-                            image: (inv.sessionImageUrl?.isNotEmpty == true)
-                                ? inv.sessionImageUrl!
-                                : 'assets/images/gym.jpeg',
+                            location: (inv.sessionLocationText?.isNotEmpty == true) ? inv.sessionLocationText! : '',
+                            image: (inv.sessionImageUrl?.isNotEmpty == true) ? inv.sessionImageUrl! : 'assets/images/gym.jpeg',
+                            invite: inv, // <-- NEW (required)
                             nameOnTap: () {
                               final buddyUserId = inv.invitedByUserId;
                               if (buddyUserId.isEmpty) return;
-
-                              Get.to(
-                                    () => BuddyProfileScreen(
-                                  buddyUserId: buddyUserId,
-                                  scenario: BuddyScenario.existingBuddy,
-                                ),
-                              );
+                              Get.to(() => BuddyProfileScreen(
+                                buddyUserId: buddyUserId,
+                                scenario: BuddyScenario.existingBuddy,
+                              ));
                             },
                           );
+
                         },
                       ),
                     );
