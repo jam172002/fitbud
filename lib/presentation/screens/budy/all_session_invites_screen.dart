@@ -42,8 +42,7 @@ class _AllSessionInvitesScreenState extends State<AllSessionInvitesScreen> {
       case InviteStatus.cancelled:
         return 'Rejected';
       case InviteStatus.pending:
-      default:
-        return 'Pending';
+      return 'Pending';
     }
   }
 
