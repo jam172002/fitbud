@@ -47,7 +47,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
     if (!mounted) return;
 
     if (res.ok) {
-      Get.off(() => UserNavigation());
+      Get.offAll(() => UserNavigation());
     } else {
       Get.dialog(
         SimpleDialogWidget(
@@ -107,7 +107,7 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
 
                           final phoneRegExp = RegExp(r'^\d{10,15}$');
                           final emailRegExp =
-                          RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                          RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$');
 
                           if (phoneRegExp.hasMatch(value)) return null;
                           if (emailRegExp.hasMatch(value)) return null;

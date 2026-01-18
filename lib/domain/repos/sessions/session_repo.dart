@@ -81,7 +81,6 @@ class SessionRepo extends RepoBase {
   }
 
 
-
   Future<void> acceptSessionInvite({
     required String sessionId,
     required String inviteId,
@@ -140,7 +139,6 @@ class SessionRepo extends RepoBase {
         .map((q) => q.docs.map((d) => SessionParticipant.fromDoc(d, sessionId: sessionId)).toList());
   }
 
-
   /// Pending (used by Home cards etc.)
   Stream<List<SessionInvite>> watchMySessionInvites({int limit = 50}) {
     final uid = _uid();
@@ -154,7 +152,7 @@ class SessionRepo extends RepoBase {
         .map((q) => q.docs.map(SessionInvite.fromDoc).toList());
   }
 
-  /// NEW: Pending / Accepted / Declined for "View All" screen filters
+  /// Pending / Accepted / Declined for "View All" screen filters
   Stream<List<SessionInvite>> watchMySessionInvitesByStatus({
     required InviteStatus status,
     int limit = 50,

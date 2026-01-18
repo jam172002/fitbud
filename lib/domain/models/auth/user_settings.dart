@@ -12,6 +12,10 @@ class UserSettings implements FirestoreModel {
   final bool allowGroupInvites;
   final String language;
   final String themeMode; // light/dark/system
+
+  /// NEW: selected address doc id from users/{uid}/addresses/{addressId}
+  final String? selectedAddressId;
+
   final DateTime? updatedAt;
 
   const UserSettings({
@@ -23,11 +27,14 @@ class UserSettings implements FirestoreModel {
     this.allowGroupInvites = true,
     this.language = 'en',
     this.themeMode = 'system',
+    this.selectedAddressId,
     this.updatedAt,
   });
 
   static UserSettings fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
+    final sel = FirestoreModel.readString(d['selectedAddressId'], fallback: '').trim();
+
     return UserSettings(
       id: doc.id,
       pushEnabled: FirestoreModel.readBool(d['pushEnabled'], fallback: true),
@@ -37,9 +44,11 @@ class UserSettings implements FirestoreModel {
       allowGroupInvites: FirestoreModel.readBool(d['allowGroupInvites'], fallback: true),
       language: FirestoreModel.readString(d['language'], fallback: 'en'),
       themeMode: FirestoreModel.readString(d['themeMode'], fallback: 'system'),
+      selectedAddressId: sel.isEmpty ? null : sel,
       updatedAt: FirestoreModel.readDate(d['updatedAt']),
     );
   }
+
 
   @override
   Map<String, dynamic> toMap() {
@@ -51,6 +60,7 @@ class UserSettings implements FirestoreModel {
       'allowGroupInvites': allowGroupInvites,
       'language': language,
       'themeMode': themeMode,
+      'selectedAddressId': selectedAddressId, // NEW
       'updatedAt': FirestoreModel.ts(updatedAt),
     };
   }

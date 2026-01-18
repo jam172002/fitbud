@@ -27,7 +27,7 @@ class _AllSessionInvitesScreenState extends State<AllSessionInvitesScreen> {
       case 'Accepted':
         return InviteStatus.accepted;
       case 'Rejected':
-        return InviteStatus.declined; // maps to your Firestore "declined"
+        return InviteStatus.declined;
       case 'Pending':
       default:
         return InviteStatus.pending;
@@ -42,8 +42,7 @@ class _AllSessionInvitesScreenState extends State<AllSessionInvitesScreen> {
       case InviteStatus.cancelled:
         return 'Rejected';
       case InviteStatus.pending:
-      default:
-        return 'Pending';
+      return 'Pending';
     }
   }
 
@@ -161,10 +160,10 @@ class _AllSessionInvitesScreenState extends State<AllSessionInvitesScreen> {
         bgColor = isSelected ? Colors.deepOrange : Colors.deepOrange.withValues(alpha: 0.2);
         break;
       case 'Accepted':
-        bgColor = isSelected ? XColors.primary : XColors.primary.withValues(alpha: 0.2);
+        bgColor = isSelected ? XColors.primary : XColors.primary.withValues(alpha:0.2);
         break;
       case 'Rejected':
-        bgColor = isSelected ? XColors.danger : XColors.danger.withValues(alpha: 0.2);
+        bgColor = isSelected ? XColors.danger : XColors.danger.withValues(alpha:0.2);
         break;
       default:
         bgColor = XColors.bodyText;

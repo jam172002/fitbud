@@ -4,7 +4,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
 
 import '../../domain/models/sessions/session_invite.dart';
-import '../../presentation/controller/session_invites_controller.dart';
+import '../../presentation/screens/budy/controller/session_invites_controller.dart';
 
 class HomeSessionInviteCard extends StatelessWidget {
   final String image;

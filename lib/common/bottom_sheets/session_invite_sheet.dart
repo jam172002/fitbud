@@ -10,7 +10,7 @@ class SessionInviteSheet extends StatefulWidget {
   final String? groupName;
   final int? membersCount;
 
-  ///  for direct buddy invite
+  /// NEW (no UI impact): for direct buddy invite
   final String? invitedUserId;
 
   const SessionInviteSheet({
@@ -70,7 +70,8 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
             onPrimary: Colors.white,
             surface: XColors.secondaryBG,
             onSurface: XColors.primaryText,
-          ), dialogTheme: DialogThemeData(backgroundColor: XColors.primaryBG),
+          ),
+          dialogBackgroundColor: XColors.primaryBG,
         ),
         child: child!,
       ),
@@ -87,7 +88,8 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
             onPrimary: Colors.white,
             surface: XColors.secondaryBG,
             onSurface: XColors.primaryText,
-          ), dialogTheme: DialogThemeData(backgroundColor: XColors.primaryBG),
+          ),
+          dialogBackgroundColor: XColors.primaryBG,
         ),
         child: child!,
       ),
@@ -100,7 +102,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
       Get.snackbar(
         "Invalid Time",
         "You cannot select past date/time",
-        backgroundColor: Colors.red.withValues(alpha: 0.2),
+        backgroundColor: Colors.red.withValues(alpha:0.2),
         colorText: Colors.red,
       );
       return;
@@ -178,7 +180,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
       Get.snackbar(
         "Required",
         "Please select activity",
-        backgroundColor: XColors.warning.withValues(alpha: 0.7),
+        backgroundColor: XColors.warning.withValues(alpha:0.7),
         colorText: XColors.primaryText,
       );
       return;
@@ -188,7 +190,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
       Get.snackbar(
         "Required",
         "Please select a gym or enter custom location",
-        backgroundColor: XColors.warning.withValues(alpha: 0.7),
+        backgroundColor: XColors.warning.withValues(alpha:0.7),
         colorText: XColors.primaryText,
       );
       return;
@@ -198,7 +200,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
       Get.snackbar(
         "Required",
         "Please enter location",
-        backgroundColor: XColors.warning.withValues(alpha: 0.7),
+        backgroundColor: XColors.warning.withValues(alpha:0.7),
         colorText: XColors.primaryText,
       );
       return;
@@ -208,7 +210,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
       Get.snackbar(
         "Required",
         "Please select date & time",
-        backgroundColor: XColors.warning.withValues(alpha: 0.7),
+        backgroundColor: XColors.warning.withValues(alpha:0.7),
         colorText: XColors.primaryText,
       );
       return;
@@ -221,7 +223,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
         Get.snackbar(
           "Error",
           "No buddy selected to invite",
-          backgroundColor: Colors.red.withValues(alpha: 0.2),
+          backgroundColor: Colors.red.withValues(alpha:0.2),
           colorText: Colors.red,
         );
         return;
@@ -270,14 +272,14 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
       Get.snackbar(
         "Success",
         "Your session invite has been sent!",
-        backgroundColor: XColors.primary.withValues(alpha: 0.7),
+        backgroundColor: XColors.primary.withValues(alpha:0.7),
         colorText: XColors.bodyText,
       );
     } catch (e) {
       Get.snackbar(
         "Error",
         e.toString(),
-        backgroundColor: Colors.red.withValues(alpha: 0.2),
+        backgroundColor: Colors.red.withValues(alpha:0.2),
         colorText: Colors.red,
       );
     } finally {
@@ -358,7 +360,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
             Text("Activity", style: TextStyle(color: XColors.secondaryText, fontSize: 12)),
             const SizedBox(height: 6),
             DropdownButtonFormField<String>(
-              initialValue: selectedActivity,
+              value: selectedActivity,
               decoration: _inputDecoration(),
               dropdownColor: XColors.secondaryBG,
               style: TextStyle(color: XColors.primaryText),
@@ -378,7 +380,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
               Text("Gym Location", style: TextStyle(color: XColors.secondaryText, fontSize: 12)),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
-                initialValue: selectedGym,
+                value: selectedGym,
                 decoration: _inputDecoration(),
                 dropdownColor: XColors.secondaryBG,
                 style: TextStyle(color: XColors.primaryText),
@@ -398,7 +400,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: XColors.primary.withValues(alpha: 0.1),
+                    color: XColors.primary.withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -472,7 +474,7 @@ class _SessionInviteSheetState extends State<SessionInviteSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                onPressed: _saving ? null : saveSession,
+                onPressed: _saving ? null : saveSession, // logic only
                 child: Text(
                   "Create Session",
                   style: TextStyle(color: Colors.white, fontSize: 14),

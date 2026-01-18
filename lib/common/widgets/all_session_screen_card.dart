@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../domain/models/sessions/session_invite.dart';
-import '../../presentation/controller/session_invites_controller.dart';
+import '../../presentation/screens/budy/controller/session_invites_controller.dart';
 
 class AllSessionsScreenCard extends StatelessWidget {
   final String title;
@@ -131,7 +131,7 @@ class AllSessionsScreenCard extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.9),
+                        color: Colors.black.withValues(alpha:0.9),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Text(

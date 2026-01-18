@@ -62,29 +62,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // for media preview only (optional)
   final List<Map<String, dynamic>> _localMediaMessages = [];
 
-  Future<void> _deleteChat() async {
-    try {
-      await repos.chatRepo.deleteChatForMe(widget.conversationId);
-
-      // Close dialog first (if open) and go back to Inbox
-      if (Get.isDialogOpen == true) Get.back();
-      if (mounted) Get.back();
-
-      Get.snackbar(
-        "Deleted",
-        "Chat removed for you.",
-        backgroundColor: XColors.primary.withOpacity(.15),
-        colorText: XColors.primaryText,
-      );
-    } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed to delete chat: $e",
-        backgroundColor: XColors.danger.withOpacity(.2),
-        colorText: XColors.primaryText,
-      );
-    }
-  }
+  // -------------------- NEW: optimistic pending messages --------------------
+  final List<_PendingText> _pendingTexts = [];
 
   @override
   void initState() {
@@ -100,9 +79,49 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  Future<void> _deleteChat() async {
+    try {
+      await repos.chatRepo.deleteChatForMe(widget.conversationId);
+
+      // Close dialog first (if open) and go back to Inbox
+      if (Get.isDialogOpen == true) Get.back();
+      if (mounted) Get.back();
+
+      Get.snackbar(
+        "Deleted",
+        "Chat removed for you.",
+        backgroundColor: XColors.primary.withValues(alpha: .15),
+        colorText: XColors.primaryText,
+      );
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Failed to delete chat: $e",
+        backgroundColor: XColors.danger.withValues(alpha: .2),
+        colorText: XColors.primaryText,
+      );
+    }
+  }
+
   Future<void> _markRead() async {
     try {
       await repos.chatRepo.markConversationRead(widget.conversationId);
+    } catch (_) {}
+  }
+
+  // OPTIONAL: only if you added it in ChatRepo. We call safely.
+  Future<void> _markDeliveredSafe() async {
+    try {
+      // If method exists in your repo, it will work.
+      // If not, it will throw NoSuchMethodError in runtime only if using dynamic.
+      // Since repos.chatRepo is strongly typed, we must keep this call guarded by try/catch.
+      // If your ChatRepo doesn't have markConversationDelivered yet, simply add it later.
+      // ignore: invalid_use_of_protected_member
+      // (No ignore needed; this is normal call if method exists.)
+      // If not exists, you must add method in ChatRepo (recommended).
+      // For now, we keep it in try-catch to avoid crashing if you add it later and forget to deploy.
+      // If your analyzer fails because method doesn't exist, comment this line until you add it.
+      // await repos.chatRepo.markConversationDelivered(widget.conversationId);
     } catch (_) {}
   }
 
@@ -124,10 +143,72 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
-  // -------------------- send text --------------------
+  // -------------------- NEW: pending reconciliation --------------------
+  /// Removes local pending items when Firestore confirms a matching message.
+  /// Since your current Message model/repo doesn't include clientMessageId yet,
+  /// we use a safe heuristic:
+  /// - same sender (me)
+  /// - same text
+  /// - createdAt is after pending.localTime - small tolerance
+  void _reconcilePending({
+    required List<Message> firestoreMessages,
+    required String myUid,
+  }) {
+    if (_pendingTexts.isEmpty) return;
+
+    final toRemoveIds = <String>{};
+
+    for (final p in _pendingTexts) {
+      final match = firestoreMessages.any((m) {
+        if (m.senderUserId != myUid) return false;
+        if (m.type != MessageType.text) return false;
+        if (m.text.trim() != p.text.trim()) return false;
+
+        final created = m.createdAt;
+        if (created == null) return false;
+
+        // tolerance: message time should be after pending time - 3s (server/client differences)
+        final minOk = p.localTime.subtract(const Duration(seconds: 3));
+        // also avoid matching very old messages (e.g. same text sent earlier)
+        final maxOk = p.localTime.add(const Duration(minutes: 2));
+
+        return !created.isBefore(minOk) && !created.isAfter(maxOk);
+      });
+
+      if (match) toRemoveIds.add(p.clientId);
+    }
+
+    if (toRemoveIds.isEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _pendingTexts.removeWhere((p) => toRemoveIds.contains(p.clientId));
+      });
+    });
+  }
+
+  // -------------------- send text (UPDATED: professional optimistic UX) --------------------
   Future<void> _sendTextMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty || _sending) return;
+
+    // 1) Clear input immediately (WhatsApp-like)
+    _messageController.clear();
+
+    // 2) Show pending bubble instantly (clock)
+    final clientId = DateTime.now().microsecondsSinceEpoch.toString();
+    setState(() {
+      _pendingTexts.add(
+        _PendingText(
+          clientId: clientId,
+          text: text,
+          localTime: DateTime.now(),
+        ),
+      );
+    });
+
+    _scrollToBottom();
 
     setState(() => _sending = true);
     try {
@@ -136,14 +217,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         type: MessageType.text,
         text: text,
       );
-      _messageController.clear();
+
       _scrollToBottom();
       await _markRead();
     } catch (e) {
+      // Keep pending bubble (professional apps keep it for retry).
+      // Also show toast.
       Get.snackbar(
         "Error",
         "Failed to send: $e",
-        backgroundColor: XColors.danger.withOpacity(.2),
+        backgroundColor: XColors.danger.withValues(alpha: .2),
         colorText: XColors.primaryText,
       );
     } finally {
@@ -177,7 +260,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     Get.snackbar(
       "Info",
       "Media preview added. Upload/sending mediaUrl can be enabled next.",
-      backgroundColor: XColors.primary.withOpacity(.2),
+      backgroundColor: XColors.primary.withValues(alpha: .2),
       colorText: XColors.primaryText,
     );
   }
@@ -261,7 +344,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           Get.snackbar(
             "Info",
             "Hook this dialog to real userIds next, then call chatRepo.addMembers().",
-            backgroundColor: XColors.primary.withOpacity(.2),
+            backgroundColor: XColors.primary.withValues(alpha: .2),
             colorText: XColors.primaryText,
           );
         },
@@ -401,7 +484,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   showDialog(
                     context: context,
                     builder: (_) => XButtonsConfirmationDialog(
-                      message: "Delete chat for you? This will remove it from your inbox and clear message history for you.",
+                      message:
+                      "Delete chat for you? This will remove it from your inbox and clear message history for you.",
                       icon: Iconsax.trash,
                       iconColor: Colors.red,
                       confirmText: "Delete",
@@ -409,8 +493,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       onConfirm: _deleteChat,
                     ),
                   );
-                  break;
-
                   break;
 
                 case 'remove_buddy':
@@ -495,98 +577,139 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       body: Column(
         children: [
           Expanded(
-            child: StreamBuilder<List<Message>>(
-              stream: repos.chatRepo.watchMessages(widget.conversationId, limit: 200),
-              builder: (context, snap) {
-                final msgs = snap.data ?? const <Message>[];
+            child: StreamBuilder<DateTime?>(
+              stream: repos.chatRepo.watchMyClearedAt(widget.conversationId),
+              builder: (context, clearedSnap) {
+                final clearedAt = clearedSnap.data;
 
-                if (snap.hasData) {
-                  _markRead();
-                }
+                return StreamBuilder<List<ConversationParticipant>>(
+                  stream: _participants$(),
+                  builder: (context, partSnap) {
+                    //final parts = partSnap.data ?? const <ConversationParticipant>[];
 
-                final combined = <dynamic>[
-                  ..._localMediaMessages,
-                  ...msgs,
-                ];
+                    return StreamBuilder<List<Message>>(
+                      stream: repos.chatRepo.watchMessages(widget.conversationId, limit: 200),
+                      builder: (context, snap) {
+                        final msgsRaw = snap.data ?? const <Message>[];
 
-                if (combined.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No messages yet.',
-                      style: TextStyle(
-                        color: XColors.bodyText.withOpacity(.7),
-                        fontSize: 13,
-                      ),
-                    ),
-                  );
-                }
+                        // Filter by clearedAt (hide older messages for this user)
+                        final msgs = (clearedAt == null)
+                            ? msgsRaw
+                            : msgsRaw.where((m) {
+                          final dt = m.createdAt; // DateTime?
+                          if (dt == null) return true; // keep if unknown
+                          return !dt.isBefore(clearedAt);
+                        }).toList();
 
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  reverse: true,
-                  itemCount: combined.length + (_isTyping ? 1 : 0) + 1,
-                  itemBuilder: (_, index) {
-                    // bottom padding
-                    if (index == combined.length + (_isTyping ? 1 : 0)) {
-                      return const SizedBox(height: 8);
-                    }
+                        if (snap.hasData) {
+                          _markRead();
+                          _markDeliveredSafe(); // safe/no-op until you add repo method
+                        }
 
-                    // typing indicator (if enabled)
-                    if (_isTyping && index == combined.length) {
-                      return const TypingIndicator(avatar: 'assets/images/buddy.jpg');
-                    }
+                        // NEW: reconcile pending with Firestore confirmations
+                        _reconcilePending(firestoreMessages: msgs, myUid: uid);
 
-                    final item = combined[index];
+                        // Keep your existing combined behavior, but include pending texts
+                        final combined = <dynamic>[
+                          ..._localMediaMessages,
+                          ..._pendingTexts,
+                          ...msgs,
+                        ];
 
-                    // Local media preview bubble
-                    if (item is Map<String, dynamic> && item.containsKey('file')) {
-                      final file = item['file'] as File;
-                      final isVideo = item['isVideo'] as bool;
-                      final time = item['time'] as String;
-                      return Container(
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        child: SentMedia(
-                          file: file,
-                          isVideo: isVideo,
-                          time: time,
-                          onTap: () => _openFullScreen(file, isVideo: isVideo),
-                        ),
-                      );
-                    }
+                        if (combined.isEmpty) {
+                          return Center(
+                            child: Text(
+                              'No messages yet.',
+                              style: TextStyle(
+                                color: XColors.bodyText.withValues(alpha: .7),
+                                fontSize: 13,
+                              ),
+                            ),
+                          );
+                        }
 
-                    // Firestore message bubble
-                    final m = item as Message;
-                    final isSent = m.senderUserId == uid;
-                    final time = _timeLabel(m.createdAt);
+                        return ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(16),
+                          reverse: true,
+                          itemCount: combined.length + (_isTyping ? 1 : 0) + 1,
+                          itemBuilder: (_, index) {
+                            // bottom padding
+                            if (index == combined.length + (_isTyping ? 1 : 0)) {
+                              return const SizedBox(height: 8);
+                            }
 
-                    if (m.type != MessageType.text) {
-                      final fallback = m.text.isNotEmpty ? m.text : 'Message';
-                      return Container(
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        child: isSent
-                            ? SentMessage(message: fallback, time: time)
-                            : ReceivedMessage(
-                          message: fallback,
-                          time: time,
-                          senderName: 'User',
-                          avatar: 'assets/images/buddy.jpg',
-                          isGroup: widget.isGroup,
-                        ),
-                      );
-                    }
+                            // typing indicator (if enabled)
+                            if (_isTyping && index == combined.length) {
+                              return const TypingIndicator(avatar: 'assets/images/buddy.jpg');
+                            }
 
-                    return Container(
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      child: isSent
-                          ? SentMessage(message: m.text, time: time)
-                          : ReceivedMessage(
-                        message: m.text,
-                        time: time,
-                        senderName: 'User',
-                        avatar: 'assets/images/buddy.jpg',
-                        isGroup: widget.isGroup,
-                      ),
+                            final item = combined[index];
+
+                            // Local media preview bubble
+                            if (item is Map<String, dynamic> && item.containsKey('file')) {
+                              final file = item['file'] as File;
+                              final isVideo = item['isVideo'] as bool;
+                              final time = item['time'] as String;
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                child: SentMedia(
+                                  file: file,
+                                  isVideo: isVideo,
+                                  time: time,
+                                  onTap: () => _openFullScreen(file, isVideo: isVideo),
+                                ),
+                              );
+                            }
+
+                            // NEW: Pending text bubble (clock)
+                            if (item is _PendingText) {
+                              final time = _timeLabel(item.localTime);
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                child: _PendingSentBubble(
+                                  message: item.text,
+                                  time: time,
+                                ),
+                              );
+                            }
+
+                            // Firestore message bubble
+                            final m = item as Message;
+                            final isSent = m.senderUserId == uid;
+                            final time = _timeLabel(m.createdAt);
+
+                            if (m.type != MessageType.text) {
+                              final fallback = m.text.isNotEmpty ? m.text : 'Message';
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                child: isSent
+                                    ? SentMessage(message: fallback, time: time)
+                                    : ReceivedMessage(
+                                  message: fallback,
+                                  time: time,
+                                  senderName: 'User',
+                                  avatar: 'assets/images/buddy.jpg',
+                                  isGroup: widget.isGroup,
+                                ),
+                              );
+                            }
+
+                            return Container(
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              child: isSent
+                                  ? SentMessage(message: m.text, time: time)
+                                  : ReceivedMessage(
+                                message: m.text,
+                                time: time,
+                                senderName: 'User',
+                                avatar: 'assets/images/buddy.jpg',
+                                isGroup: widget.isGroup,
+                              ),
+                            );
+                          },
+                        );
+                      },
                     );
                   },
                 );
@@ -603,6 +726,52 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
     );
   }
+}
 
+// -------------------- NEW: Pending bubble UI (keeps existing UI intact) --------------------
+/// This DOES NOT replace your existing SentMessage widget.
+/// It only adds a "clock" indicator for pending state while keeping similar alignment.
+/// You can later upgrade SentMessage itself for sent/delivered/read ticks.
+class _PendingSentBubble extends StatelessWidget {
+  final String message;
+  final String time;
 
+  const _PendingSentBubble({
+    required this.message,
+    required this.time,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Use your existing bubble for consistent UI
+          SentMessage(message: message, time: time),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Iconsax.clock, size: 14, color: XColors.secondaryText),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// -------------------- NEW: pending model --------------------
+class _PendingText {
+  final String clientId;
+  final String text;
+  final DateTime localTime;
+
+  _PendingText({
+    required this.clientId,
+    required this.text,
+    required this.localTime,
+  });
 }

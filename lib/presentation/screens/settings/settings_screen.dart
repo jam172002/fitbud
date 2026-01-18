@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 
 import '../../../common/appbar/common_appbar.dart';
 import '../../../common/widgets/two_buttons_dialog.dart';
+import '../authentication/controllers/auth_controller.dart';
+import '../authentication/screens/user_login_screen.dart';
 import 'about_app_screen.dart';
 import 'notification_settings_screen.dart';
 
@@ -85,9 +87,26 @@ class SettingsScreen extends StatelessWidget {
                 message: 'Are you sure you want to logout?',
                 icon: LucideIcons.log_out,
                 iconColor: Colors.redAccent,
-                onConfirm: () {
-                  // Handle logout
+                onConfirm: () async {
+                  final authC = Get.find<AuthController>();
+
+                  Get.back(); // close confirmation dialog
+
+                  try {
+                    await authC.logout();
+
+                    // IMPORTANT: do not use Get.offAllNamed('/login') unless you defined it
+                    Get.offAll(() => const UserLoginScreen());
+                  } catch (e) {
+                    Get.snackbar(
+                      'Logout Failed',
+                      e.toString(),
+                      snackPosition: SnackPosition.BOTTOM,
+                    );
+                  }
                 },
+
+
               );
             },
           ),
