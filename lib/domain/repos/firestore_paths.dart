@@ -46,4 +46,6 @@ class FirestorePaths {
 
   // addresses subcollection
   static String userAddresses(String uid) => 'users/$uid/addresses';
+  // Attendance stats
+  static String gymStatsDaily(String gymId, String dayKey) => '$gyms/$gymId/statsDaily/$dayKey';
 }

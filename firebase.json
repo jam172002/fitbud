@@ -1,1 +1,43 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"fitbud-46f70","appId":"1:900712761830:android:d5a3ff698713767c2f6e27","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"fitbud-46f70","configurations":{"android":"1:900712761830:android:d5a3ff698713767c2f6e27","ios":"1:900712761830:ios:cbba31fb5629ef262f6e27","macos":"1:900712761830:ios:cbba31fb5629ef262f6e27","web":"1:900712761830:web:a2b99bc0df870d992f6e27","windows":"1:900712761830:web:db28f3b99da14a702f6e27"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "fitbud-46f70",
+          "appId": "1:900712761830:android:d5a3ff698713767c2f6e27",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "fitbud-46f70",
+          "configurations": {
+            "android": "1:900712761830:android:d5a3ff698713767c2f6e27",
+            "ios": "1:900712761830:ios:cbba31fb5629ef262f6e27",
+            "macos": "1:900712761830:ios:cbba31fb5629ef262f6e27",
+            "web": "1:900712761830:web:a2b99bc0df870d992f6e27",
+            "windows": "1:900712761830:web:db28f3b99da14a702f6e27"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint",
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
+}

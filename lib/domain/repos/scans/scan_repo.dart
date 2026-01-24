@@ -28,6 +28,7 @@ class ScanRepo extends RepoBase {
         .map((q) => q.docs.map(GymScan.fromDoc).toList());
   }
 
+
   /// SECURE FLOW (Recommended):
   /// Calls Cloud Function validateGymScan which:
   /// - validates subscription + plan limits
@@ -80,4 +81,22 @@ class ScanRepo extends RepoBase {
     });
     return ref.id;
   }
+
+  Future<Map<String, dynamic>> checkInToGym({
+    required String gymId,
+    required String clientCheckinId,
+    String deviceId = '',
+  }) async {
+    _uid(); // ensures signed in
+
+    final callable = functions.httpsCallable('checkInToGym');
+    final res = await callable.call(<String, dynamic>{
+      'gymId': gymId,
+      'clientCheckinId': clientCheckinId,
+      'deviceId': deviceId,
+    });
+
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
 }

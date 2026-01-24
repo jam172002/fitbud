@@ -454,7 +454,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       isGroup: widget.isGroup,
                       groupName: widget.groupName,
                       membersCount: 0,
+
+                      //THIS is the buddy of the direct chat
+                      invitedUserId: widget.isGroup ? '' : widget.directOtherUserId,
                     ),
+
                   );
                   break;
 
