@@ -6,6 +6,7 @@ import 'package:fitbud/presentation/screens/authentication/screens/user_login_sc
 import '../../../../common/widgets/form_field.dart';
 import '../../../../common/widgets/gender_dropdown.dart';
 import '../../../../common/widgets/simple_dialog.dart';
+import '../../../../domain/models/auth/user_address.dart';
 import '../controllers/auth_controller.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
@@ -188,23 +189,32 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
         subtitle: 'Please give us access to your GPS Location',
         illustration: Image.asset('assets/icons/location.png'),
         allowButtonText: 'Allow',
-            requestLocationPermission: true,
-            showDenyButton: false,
+        requestLocationPermission: true,
+        showDenyButton: false,
         onDeny: () {},
         onAllow: () async {
-          // navigate to location selector
-          // You can return selected location from LocationSelectorScreen via Get.back(result: 'City')
-          final result = await Get.to<String>(() => const LocationSelectorScreen());
-          if (result != null && result.trim().isNotEmpty) {
-            setState(() => selectedLocation = result.trim());
-          } else {
-            // fallback
-            setState(() => selectedLocation = "Selected location");
+          // IMPORTANT: LocationSelectorScreen returns UserAddress (NOT String)
+          final addr = await Get.to<UserAddress>(() => const LocationSelectorScreen());
+
+          if (!mounted) return;
+
+          // If user selected an address, update state and go back to signup
+          if (addr != null) {
+            final label = (addr.city?.trim().isNotEmpty == true)
+                ? addr.city!.trim()
+                : addr.line1?.trim();
+
+            setState(() => selectedLocation = label);
+
+            // IMPORTANT: You are currently on PermissionScreen after the selector pops.
+            // Pop PermissionScreen to return to Signup.
+            Get.back();
           }
         },
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {

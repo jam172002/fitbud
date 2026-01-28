@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
@@ -120,6 +121,23 @@ class AuthController extends GetxController {
       isLoading.value = false;
     }
   }
+  Future<void> updateUserDeviceToken() async {
+    final _fcm = FirebaseMessaging.instance;
+    /// Get device token
+    final userDeviceToken = await _fcm.getToken();
+
+    /// Subscribe user to receive push notifications
+    await _fcm.subscribeToTopic("chat");
+
+    /// Update user device token
+    /// Check token result
+    if (userDeviceToken != null) {
+      await _repos.authRepo.updateMeFields({
+        "fcmTokens":userDeviceToken
+      });
+
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // SIGN UP (Email/Password)
@@ -217,7 +235,7 @@ class AuthController extends GetxController {
         email: input,
         password: password,
       );
-
+      updateUserDeviceToken();
       return AuthResult.success('Login successful');
     } on FirebaseAuthException catch (e) {
       return AuthResult.fail(_mapAuthError(e), code: e.code);

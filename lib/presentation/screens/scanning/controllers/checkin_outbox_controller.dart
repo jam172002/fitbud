@@ -17,18 +17,18 @@ class CheckinOutboxController extends GetxController {
   Timer? _timer;
   final RxBool syncing = false.obs;
 
-  // ✅ ADDED: Observable mirror of Hive for UI
+  //Observable mirror of Hive for UI
   final RxMap<String, CheckinOutboxItem> itemsById =
       <String, CheckinOutboxItem>{}.obs;
 
-  // ✅ ADDED: Optional helper list (latest first) for UI screens
+  //Optional helper list (latest first) for UI screens
   List<CheckinOutboxItem> get itemsSorted {
     final list = itemsById.values.toList();
     list.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
     return list;
   }
 
-  // ✅ ADDED: Keep memory cache in sync with Hive
+  //Keep memory cache in sync with Hive
   void _rebuildCache() {
     final map = <String, CheckinOutboxItem>{};
     for (final e in _box.values) {
@@ -41,15 +41,15 @@ class CheckinOutboxController extends GetxController {
   Future<void> onInit() async {
     super.onInit();
 
-    // ✅ Repo is guaranteed because Repos is registered in main() before this controller
+    //Repo is guaranteed because Repos is registered in main() before this controller
     repo = Get.find<Repos>().scanRepo;
 
     _box = await Hive.openBox<CheckinOutboxItem>(boxName);
 
-    // ✅ ADDED: Build initial cache
+    //ADDED: Build initial cache
     _rebuildCache();
 
-    // ✅ ADDED: Watch changes and update cache
+    //ADDED: Watch changes and update cache
     _box.watch().listen((_) {
       _rebuildCache();
     });
@@ -71,7 +71,6 @@ class CheckinOutboxController extends GetxController {
 
   String newClientCheckinId() => const Uuid().v4();
 
-  // ✅ KEEP: Your existing method remains untouched (API stays same)
   Future<void> enqueueAndSend({required String gymId}) async {
     final clientId = newClientCheckinId();
     final item = CheckinOutboxItem(
@@ -82,17 +81,17 @@ class CheckinOutboxController extends GetxController {
     );
     await _box.put(clientId, item);
 
-    // ✅ ADDED: Keep cache updated immediately (even before watch event)
+    //Keep cache updated immediately (even before watch event)
     itemsById[clientId] = item;
 
     // Immediate send attempt (best UX)
     await _send(item);
 
-    // ✅ ADDED: Refresh cache after send
+    //Refresh cache after send
     _rebuildCache();
   }
 
-  // ✅ ADDED: New method that returns id (without changing existing code usage)
+  //New method that returns id (without changing existing code usage)
   Future<String> enqueueAndSendWithId({required String gymId}) async {
     final clientId = newClientCheckinId();
     final item = CheckinOutboxItem(
@@ -111,7 +110,7 @@ class CheckinOutboxController extends GetxController {
     return clientId;
   }
 
-  // ✅ ADDED: Get latest item for a gym (handy fallback)
+  // Get latest item for a gym (handy fallback)
   CheckinOutboxItem? latestForGym(String gymId) {
     final list = _box.values.where((e) => e.gymId == gymId).toList();
     if (list.isEmpty) return null;
@@ -133,7 +132,7 @@ class CheckinOutboxController extends GetxController {
         await _send(item);
       }
 
-      // ✅ ADDED: Refresh cache after flush
+      // Refresh cache after flush
       _rebuildCache();
     } finally {
       syncing.value = false;
@@ -147,7 +146,7 @@ class CheckinOutboxController extends GetxController {
     item.attempts += 1;
     await item.save();
 
-    // ✅ ADDED: Refresh cache for UI immediately
+    //Refresh cache for UI immediately
     itemsById[item.clientCheckinId] = item;
 
     final deviceId = await DeviceId.get();
@@ -170,7 +169,7 @@ class CheckinOutboxController extends GetxController {
       }
       await item.save();
 
-      // ✅ ADDED: Refresh cache after result
+      //Refresh cache after result
       itemsById[item.clientCheckinId] = item;
     } catch (e) {
       // network/timeout -> keep failed and retry later
@@ -178,7 +177,7 @@ class CheckinOutboxController extends GetxController {
       item.lastError = e.toString();
       await item.save();
 
-      // ✅ ADDED: Refresh cache after error
+      //Refresh cache after error
       itemsById[item.clientCheckinId] = item;
     }
   }

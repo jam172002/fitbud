@@ -164,69 +164,74 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Select Location'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Get.back(),
+    return PopScope(
+      canPop: true,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Select Location'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Get.back(),
+          ),
         ),
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 10),
+        body: Column(
+          children: [
+            const SizedBox(height: 10),
 
-          // Search Field
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: searchController,
-              decoration: InputDecoration(
-                hintText: 'Search city',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            // Search Field
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search city',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
+                onSubmitted: (val) => _selectFromSearch(val),
               ),
-              onSubmitted: (val) => _selectFromSearch(val),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Current Location
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(),
-            )
-          else if (_currentLocationLabel != null)
-            ListTile(
-              leading: const Icon(Icons.my_location),
-              title: const Text('Use current location'),
-              subtitle: Text(_currentLocationLabel!),
-              onTap: _selectCurrentLocation,
             ),
 
-          const Divider(),
+            const SizedBox(height: 16),
 
-          // Popular Cities
-          Expanded(
-            child: ListView.builder(
-              itemCount: _popularCities.length,
-              itemBuilder: (context, index) {
-                final city = _popularCities[index];
-                return ListTile(
-                  leading: const Icon(Icons.location_city),
-                  title: Text(city),
-                  onTap: () => _selectCityOnly(city),
-                );
-              },
+            // Current Location
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(),
+              )
+            else if (_currentLocationLabel != null)
+              ListTile(
+                leading: const Icon(Icons.my_location),
+                title: const Text('Use current location'),
+                subtitle: Text(_currentLocationLabel!),
+                onTap: _selectCurrentLocation,
+              ),
+
+            const Divider(),
+
+            // Popular Cities
+            Expanded(
+              child: ListView.builder(
+                itemCount: _popularCities.length,
+                itemBuilder: (context, index) {
+                  final city = _popularCities[index];
+                  return ListTile(
+                    leading: const Icon(Icons.location_city),
+                    title: Text(city),
+                    onTap: () => _selectCityOnly(city),
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
 }

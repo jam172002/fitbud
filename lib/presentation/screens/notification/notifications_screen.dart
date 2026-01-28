@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:fitbud/utils/colors.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../common/appbar/common_appbar.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -44,40 +45,81 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       'isRead': true,
     },
   ];
+  IconData _getIcon(String? type) {
+    switch (type) {
+      case "session_invite":
+        return LucideIcons.calendar;
+      case "buddy_request":
+        return Iconsax.user_add;
+      case "buddy_accept":
+        return Iconsax.tick_circle;
+      case "message":
+        return Iconsax.message_text;
+      default:
+        return LucideIcons.bell;
+    }
+  }
+
+  String _timeAgo(Timestamp timestamp) {
+    final date = timestamp.toDate();
+    final diff = DateTime.now().difference(date);
+
+    if (diff.inMinutes < 1) return "Just now";
+    if (diff.inMinutes < 60) return "${diff.inMinutes}m ago";
+    if (diff.inHours < 24) return "${diff.inHours}h ago";
+    return "${diff.inDays}d ago";
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Sort unread on top
-    notifications.sort((a, b) {
-      if (a['isRead'] == b['isRead']) return 0;
-      if (a['isRead'] == false) return -1;
-      return 1;
-    });
+    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
     return Scaffold(
       backgroundColor: XColors.primaryBG,
       appBar: XAppBar(title: 'Notifications'),
-      body: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        itemCount: notifications.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, index) {
-          final item = notifications[index];
-          return GestureDetector(
-            onTap: () {
-              if (!item['isRead']) {
-                setState(() {
-                  notifications[index]['isRead'] = true;
-                });
-              }
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection("notifications")
+            .where("userId", isEqualTo: currentUserId)
+            .orderBy("createdAt", descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(
+              child: Text("No notifications yet"),
+            );
+          }
+
+          final docs = snapshot.data!.docs;
+
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (_, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+
+              return GestureDetector(
+                onTap: () async {
+                  if (data['isRead'] == false) {
+                    await docs[index].reference.update({
+                      'isRead': true,
+                    });
+                  }
+                },
+                child: _NotificationTile(
+                  icon: _getIcon(data['type']),
+                  title: data['title'] ?? '',
+                  subtitle: data['body'] ?? '',
+                  time: _timeAgo(data['createdAt']),
+                  isRead: data['isRead'] ?? true,
+                ),
+              );
             },
-            child: _NotificationTile(
-              icon: item['icon'],
-              title: item['title'],
-              subtitle: item['subtitle'],
-              time: item['time'],
-              isRead: item['isRead'],
-            ),
           );
         },
       ),
