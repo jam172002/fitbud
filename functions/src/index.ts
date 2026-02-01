@@ -6,43 +6,54 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const TZ = "Asia/Karachi";
-const COOLDOWN_MINUTES = 120; // change as needed
+const COOLDOWN_MINUTES = 120;
 
-export const checkInToGym = onCall(async (req) => {
+/**
+ * scanGym
+ * ------------------------------------
+ * Canonical gym scan entry point.
+ * Replaces legacy checkInToGym.
+ *
+ * Responsibilities:
+ * - Auth validation
+ * - Gym validation
+ * - Idempotency
+ * - Cooldown enforcement
+ * - Atomic scan + analytics write
+ */
+export const scanGym = onCall(async (req) => {
   const uid = req.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "User is not signed in.");
 
   const gymId = String(req.data?.gymId ?? "").trim();
-  const clientCheckinId = String(req.data?.clientCheckinId ?? "").trim();
+  const clientScanId = String(req.data?.clientScanId ?? "").trim();
   const deviceId = String(req.data?.deviceId ?? "").trim();
 
   if (!gymId) throw new HttpsError("invalid-argument", "gymId is required.");
-  if (!clientCheckinId) throw new HttpsError("invalid-argument", "clientCheckinId is required.");
+  if (!clientScanId) throw new HttpsError("invalid-argument", "clientScanId is required.");
 
-  // 1) Validate gym exists (and optionally active)
+  // 1️⃣ Validate gym
   const gymRef = db.doc(`gyms/${gymId}`);
   const gymSnap = await gymRef.get();
   if (!gymSnap.exists) throw new HttpsError("not-found", "Gym not found.");
 
-  const gymData = gymSnap.data() ?? {};
-  if (gymData["isActive"] === false) {
-    return { ok: false, result: "gym_inactive", message: "Gym is not active." };
+  if (gymSnap.data()?.isActive === false) {
+    return { ok: false, result: "gym_inactive" };
   }
 
-  // 2) Idempotency (exactly-once): same user + same clientCheckinId
-  const idemSnap = await db.collection("scans")
+  // 2️⃣ Idempotency
+  const idem = await db.collection("scans")
     .where("userId", "==", uid)
-    .where("clientCheckinId", "==", clientCheckinId)
+    .where("clientScanId", "==", clientScanId)
     .limit(1)
     .get();
 
-  if (!idemSnap.empty) {
-    const d = idemSnap.docs[0];
-    return { ok: true, scanId: d.id, result: "already_processed" };
+  if (!idem.empty) {
+    return { ok: true, scanId: idem.docs[0].id, result: "already_processed" };
   }
 
-  // 3) Cooldown (same user + same gym): last scannedAt must be older than COOLDOWN_MINUTES
-  const lastSnap = await db.collection("scans")
+  // 3️⃣ Cooldown
+  const last = await db.collection("scans")
     .where("userId", "==", uid)
     .where("gymId", "==", gymId)
     .orderBy("scannedAt", "desc")
@@ -50,26 +61,20 @@ export const checkInToGym = onCall(async (req) => {
     .get();
 
   const now = admin.firestore.Timestamp.now();
-  if (!lastSnap.empty) {
-    const lastTs = lastSnap.docs[0].get("scannedAt") as admin.firestore.Timestamp | null;
-    if (lastTs) {
-      const diffMin = (now.toMillis() - lastTs.toMillis()) / 60000;
-      if (diffMin < COOLDOWN_MINUTES) {
-        return {
-          ok: false,
-          result: "cooldown",
-          message: `Please wait ${Math.ceil(COOLDOWN_MINUTES - diffMin)} minutes before scanning again.`,
-        };
-      }
+
+  if (!last.empty) {
+    const lastTs = last.docs[0].get("scannedAt");
+    if (lastTs && (now.toMillis() - lastTs.toMillis()) / 60000 < COOLDOWN_MINUTES) {
+      return { ok: false, result: "cooldown" };
     }
   }
 
-  // 4) Compute dayKey/hour in Pakistan timezone (server-side)
+  // 4️⃣ Time bucketing
   const dt = DateTime.fromMillis(now.toMillis(), { zone: TZ });
   const dayKey = dt.toFormat("yyyy-LL-dd");
   const hour = dt.hour;
 
-  // 5) Transaction: write scan + update daily stats
+  // 5️⃣ Atomic write
   const scanRef = db.collection("scans").doc();
   const statsRef = db.doc(`gyms/${gymId}/statsDaily/${dayKey}`);
 
@@ -77,19 +82,18 @@ export const checkInToGym = onCall(async (req) => {
     tx.set(scanRef, {
       userId: uid,
       gymId,
-      clientCheckinId,
+      clientScanId,
       deviceId,
+      scannedAt: admin.firestore.FieldValue.serverTimestamp(),
       dayKey,
       hour,
-      scannedAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
       status: "accepted",
     });
 
     tx.set(statsRef, {
       total: admin.firestore.FieldValue.increment(1),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       [`hours.${hour}`]: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   });
 

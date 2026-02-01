@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/cupertino.dart';
 import '../../../domain/models/gyms/gym_scan.dart';
 import '../firestore_paths.dart';
 import '../firestore_repo_base.dart';
@@ -43,8 +44,11 @@ class ScanRepo extends RepoBase {
     GeoPoint? scanLocation,
     String deviceId = '',
   }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    debugPrint('AUTH USER: ${user?.uid}');
+
     final uid = _uid();
-    final callable = functions.httpsCallable('validateGymScan');
+    final callable = functions.httpsCallable('scanGym');
     final res = await callable.call(<String, dynamic>{
       'userId': uid,
       'qrPayload': qrPayload,
@@ -89,7 +93,7 @@ class ScanRepo extends RepoBase {
   }) async {
     _uid(); // ensures signed in
 
-    final callable = functions.httpsCallable('checkInToGym');
+    final callable = functions.httpsCallable('scanGym');
     final res = await callable.call(<String, dynamic>{
       'gymId': gymId,
       'clientCheckinId': clientCheckinId,

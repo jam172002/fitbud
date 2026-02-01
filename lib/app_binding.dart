@@ -1,7 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fitbud/presentation/screens/budy/controller/session_invites_controller.dart';
+import 'package:fitbud/presentation/screens/scanning/controllers/scan_controller.dart';
 import 'package:get/get.dart';
 
 import 'domain/repos/repo_provider.dart';
+import 'domain/repos/scans/scan_repo.dart';
 import 'presentation/screens/home/home_controller.dart';
 import 'presentation/screens/budy/controller/buddy_controller.dart';
 import 'presentation/screens/authentication/controllers/location_controller.dart';
@@ -38,5 +43,16 @@ class AppBinding extends Bindings {
           () => GymsUserController(Get.find<Repos>().gymRepo),
       fenix: true,
     );
+
+    Get.put<ScanRepo>(
+      ScanRepo(
+        FirebaseFirestore.instance,
+        FirebaseAuth.instance,
+        FirebaseFunctions.instance,
+      ),
+    );
+
+    Get.put(ScanController(Get.find()));
+
   }
 }

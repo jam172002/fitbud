@@ -9,7 +9,6 @@ import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'data/local/checkin_outbox_item.dart';
 import 'app.dart';
-import 'package:fitbud/presentation/screens/scanning/controllers/checkin_outbox_controller.dart';
 import 'domain/repos/repo_provider.dart';
 import 'firebase_options.dart';
 import 'package:fitbud/presentation/screens/authentication/controllers/auth_controller.dart';
@@ -28,6 +27,7 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
 
   FirebaseMessaging.onBackgroundMessage(myBackgroundMessageHandler);
 
@@ -54,7 +54,10 @@ Future<void> main() async {
 
   final repos = Repos();
   Get.put<Repos>(repos, permanent: true);
-
+  Get.put<AuthController>(
+    AuthController(Get.find<Repos>()),
+    permanent: true,
+  );
   Get.put<GymsUserController>(
     GymsUserController(Get.find<Repos>().gymRepo),
     permanent: true,
@@ -63,15 +66,7 @@ Future<void> main() async {
   Get.put<LocationController>(LocationController(), permanent: true);
   Get.put<PremiumPlanController>(PremiumPlanController(), permanent: true);
 
-  Get.put<AuthController>(
-    AuthController(Get.find<Repos>()),
-    permanent: true,
-  );
 
-  Get.put<CheckinOutboxController>(
-    CheckinOutboxController(),
-    permanent: true,
-  );
 
   runApp(const MainApp());
 }
