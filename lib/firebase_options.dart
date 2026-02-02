@@ -64,7 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '900712761830',
     projectId: 'fitbud-46f70',
     storageBucket: 'fitbud-46f70.firebasestorage.app',
-    iosBundleId: 'com.example.fitbud',
+    iosBundleId: 'com.fitbudapp.fitbud',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -73,7 +73,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '900712761830',
     projectId: 'fitbud-46f70',
     storageBucket: 'fitbud-46f70.firebasestorage.app',
-    iosBundleId: 'com.example.fitbud',
+    iosBundleId: 'com.fitbudapp.fitbud',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
