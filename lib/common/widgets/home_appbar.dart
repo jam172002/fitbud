@@ -186,15 +186,7 @@ class CustomHomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 if (hasPremium) const SizedBox(width: 14),
-                if (hasPremium)
-                  GestureDetector(
-                    onTap: onScanTap,
-                    child: const Icon(
-                      LucideIcons.scan,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
+
               ],
             ),
           ],

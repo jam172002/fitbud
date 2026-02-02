@@ -20,7 +20,6 @@ import '../budy/buddy_find_swipper.dart';
 import '../budy/specific_catagory_buddies_match_screen.dart';
 import '../notification/notifications_screen.dart';
 import '../profile/buddy_profile_screen.dart';
-import '../scanning/qr_scan_screen.dart';
 import '../subscription/premium_plans_screen.dart';
 import '../subscription/plans_controller.dart';
 import 'home_controller.dart';
@@ -123,8 +122,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 await locationController.selectAndPersist(pickedLocation);
               }
             },
-
-            onScanTap: () => Get.to(() => QRScanScreen()),
             onNotificationTap: () => Get.to(() => NotificationsScreen()),
             hasPremium: home.hasPremium,
           );

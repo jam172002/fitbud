@@ -1,6 +1,7 @@
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import '../scanning/qr_scan_screen.dart';
 
 import '../../../common/appbar/common_appbar.dart';
 import '../../../domain/models/gyms/gym.dart';
@@ -18,6 +19,24 @@ class GymDetailScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: XColors.primaryBG,
       appBar: XAppBar(title: ''),
+
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: XColors.primary.withValues(alpha: 0.7),
+        elevation: 0,
+        shape: const CircleBorder(),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => QRScanScreen()),
+          );
+        },
+        child: const Icon(
+          LucideIcons.scan,
+          color: Colors.white,
+          size: 22,
+        ),
+      ),
+
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
