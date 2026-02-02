@@ -5,9 +5,6 @@ import 'package:fitbud/presentation/screens/gyms/controllers/gyms_user_controlle
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:hive/hive.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'data/local/checkin_outbox_item.dart';
 import 'app.dart';
 import 'domain/repos/repo_provider.dart';
 import 'firebase_options.dart';
@@ -17,6 +14,7 @@ import 'package:fitbud/presentation/screens/subscription/plans_controller.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
+
 import 'notification_helper/my_notification.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -49,8 +47,6 @@ Future<void> main() async {
 
   await MyNotification.initialize(flutterLocalNotificationsPlugin);
 
-  await Hive.initFlutter();
-  Hive.registerAdapter(CheckinOutboxItemAdapter());
 
   final repos = Repos();
   Get.put<Repos>(repos, permanent: true);
