@@ -288,11 +288,17 @@ class BuddyRepo extends RepoBase {
     int limit = 30,
     String? activity,
     String? city,
+    bool premiumOnly = true,
   }) async {
     final uid = _uid();
 
     Query<Map<String, dynamic>> q =
-    db.collection(FirestorePaths.users).where('isActive', isEqualTo: true);
+    db.collection(FirestorePaths.users)
+        .where('isActive', isEqualTo: true);
+
+    if (premiumOnly) {
+      q = q.where('isPremium', isEqualTo: true);
+    }
 
     if (city != null && city.trim().isNotEmpty) {
       q = q.where('city', isEqualTo: city.trim());
