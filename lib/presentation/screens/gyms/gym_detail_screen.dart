@@ -1,3 +1,4 @@
+import 'package:fitbud/presentation/screens/gyms/widgets/gym_user_scans_section.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -198,6 +199,13 @@ class GymDetailScreen extends StatelessWidget {
               ),
 
               const SizedBox(height: 30),
+
+              const SizedBox(height: 24),
+
+              GymUserScansSection(gymId: gym.id),
+
+              const SizedBox(height: 30),
+
             ],
           ),
         ),
