@@ -1,5 +1,6 @@
 import 'package:fitbud/presentation/screens/profile/transactions_screen.dart';
 import 'package:fitbud/presentation/screens/profile/user_profile_details_screen.dart';
+import 'package:fitbud/presentation/screens/scanning/scan_history_screen.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:fitbud/utils/enums.dart';
 import 'package:flutter/material.dart';
@@ -240,6 +241,16 @@ class ProfileScreen extends StatelessWidget {
               subtitle: 'View all app settings',
               onTap: () {
                 Get.to(() => SettingsScreen());
+              },
+            ),
+            const SizedBox(height: 12),
+
+            _ProfileTile(
+              icon: LucideIcons.scan,
+              title: 'Scan History',
+              subtitle: 'View all app scans',
+              onTap: () {
+                Get.to(() => ScanHistoryScreen());
               },
             ),
           ],
