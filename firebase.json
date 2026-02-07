@@ -34,10 +34,17 @@
         "*.local"
       ],
       "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run lint",
-        "npm --prefix \"$RESOURCE_DIR\" run build"
+        "npm --prefix functions run lint",
+        "npm --prefix functions run build"
       ],
       "source": "functions"
     }
-  ]
+  ],
+
+  "hosting": {
+    "public": "public",
+    "rewrites": [
+      { "source": "/payments/**", "destination": "/payments/index.html" }
+    ]
+  }
 }

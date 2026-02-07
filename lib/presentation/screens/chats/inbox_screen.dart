@@ -3,7 +3,6 @@ import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
-
 import '../../../common/appbar/common_appbar.dart';
 import '../../../common/bottom_sheets/create_group_sheet.dart';
 import '../../../common/bottom_sheets/show_buddies_sheet.dart';
