@@ -15,111 +15,191 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scanGym = void 0;
+exports.directPayFinalizeFromRedirect = exports.directPayCreatePaymentUrl = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
-const luxon_1 = require("luxon");
+const params_1 = require("firebase-functions/params");
+const crypto_1 = __importDefault(require("crypto"));
 admin.initializeApp();
-const db = admin.firestore();
-const TZ = "Asia/Karachi";
-const COOLDOWN_MINUTES = 120;
-/**
- * scanGym
- * ------------------------------------
- * Canonical gym scan entry point.
- * Replaces legacy checkInToGym.
- *
- * Responsibilities:
- * - Auth validation
- * - Gym validation
- * - Idempotency
- * - Cooldown enforcement
- * - Atomic scan + analytics write
- */
-exports.scanGym = (0, https_1.onCall)(async (req) => {
-    const uid = req.auth?.uid;
+const DIRECTPAY_CLIENT_ID = (0, params_1.defineSecret)("DIRECTPAY_CLIENT_ID");
+const DIRECTPAY_CLIENT_SECRET = (0, params_1.defineSecret)("DIRECTPAY_CLIENT_SECRET");
+const DIRECTPAY_BASE_URL = (0, params_1.defineSecret)("DIRECTPAY_BASE_URL");
+const APP_PUBLIC_BASE_URL = (0, params_1.defineSecret)("APP_PUBLIC_BASE_URL");
+// ---------- Helpers ----------
+function amountToPaisas(pricePkr) {
+    const paisas = Math.round((pricePkr + Number.EPSILON) * 100);
+    return String(paisas);
+}
+function hmacSha256Hex(plainText, secret) {
+    return crypto_1.default.createHmac("sha256", secret).update(plainText, "utf8").digest("hex");
+}
+function requireString(v, field) {
+    if (typeof v !== "string" || !v.trim()) {
+        throw new https_1.HttpsError("invalid-argument", `${field} is required`);
+    }
+    return v.trim();
+}
+function requireBool(v, field) {
+    if (typeof v !== "boolean") {
+        throw new https_1.HttpsError("invalid-argument", `${field} must be boolean`);
+    }
+    return v;
+}
+// ---------- 1) Create Payment URL ----------
+exports.directPayCreatePaymentUrl = (0, https_1.onCall)({
+    region: "asia-south1",
+    secrets: [DIRECTPAY_CLIENT_ID, DIRECTPAY_CLIENT_SECRET, DIRECTPAY_BASE_URL, APP_PUBLIC_BASE_URL],
+}, async (req) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const uid = (_a = req.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
-        throw new https_1.HttpsError("unauthenticated", "User is not signed in.");
-    const gymId = String(req.data?.gymId ?? "").trim();
-    const clientScanId = String(req.data?.clientScanId ?? "").trim();
-    const deviceId = String(req.data?.deviceId ?? "").trim();
-    if (!gymId)
-        throw new https_1.HttpsError("invalid-argument", "gymId is required.");
-    if (!clientScanId)
-        throw new https_1.HttpsError("invalid-argument", "clientScanId is required.");
-    // 1️⃣ Validate gym
-    const gymRef = db.doc(`gyms/${gymId}`);
-    const gymSnap = await gymRef.get();
-    if (!gymSnap.exists)
-        throw new https_1.HttpsError("not-found", "Gym not found.");
-    if (gymSnap.data()?.isActive === false) {
-        return { ok: false, result: "gym_inactive" };
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const orderId = requireString((_b = req.data) === null || _b === void 0 ? void 0 : _b.orderId, "orderId");
+    const planId = requireString((_c = req.data) === null || _c === void 0 ? void 0 : _c.planId, "planId");
+    // Fetch user (must contain name/email/msisdn)
+    const userSnap = await admin.firestore().collection("users").doc(uid).get();
+    if (!userSnap.exists)
+        throw new https_1.HttpsError("failed-precondition", "User profile missing");
+    const user = userSnap.data() || {};
+    const payerName = String(user.name || user.fullName || "").trim();
+    const email = String(user.email || "").trim();
+    const msisdn = String(user.msisdn || user.phone || "").trim(); // "03xxxxxxxxx"
+    if (!payerName)
+        throw new https_1.HttpsError("failed-precondition", "User name missing");
+    if (!email)
+        throw new https_1.HttpsError("failed-precondition", "User email missing");
+    if (!msisdn)
+        throw new https_1.HttpsError("failed-precondition", "User msisdn/phone missing");
+    // Fetch plan
+    const planSnap = await admin.firestore().collection("plans").doc(planId).get();
+    if (!planSnap.exists)
+        throw new https_1.HttpsError("not-found", "Plan not found");
+    const plan = planSnap.data() || {};
+    if (plan.isActive === false)
+        throw new https_1.HttpsError("failed-precondition", "Plan inactive");
+    const price = Number((_d = plan.price) !== null && _d !== void 0 ? _d : 0);
+    const durationDays = Number((_f = (_e = plan.durationDays) !== null && _e !== void 0 ? _e : plan.duration) !== null && _f !== void 0 ? _f : 0);
+    if (!durationDays || durationDays <= 0) {
+        throw new https_1.HttpsError("failed-precondition", "Plan durationDays is invalid");
     }
-    // 2️⃣ Idempotency
-    const idem = await db.collection("scans")
-        .where("userId", "==", uid)
-        .where("clientScanId", "==", clientScanId)
-        .limit(1)
-        .get();
-    if (!idem.empty) {
-        return { ok: true, scanId: idem.docs[0].id, result: "already_processed" };
-    }
-    // 3️⃣ Cooldown
-    const last = await db.collection("scans")
-        .where("userId", "==", uid)
-        .where("gymId", "==", gymId)
-        .orderBy("scannedAt", "desc")
-        .limit(1)
-        .get();
-    const now = admin.firestore.Timestamp.now();
-    if (!last.empty) {
-        const lastTs = last.docs[0].get("scannedAt");
-        if (lastTs && (now.toMillis() - lastTs.toMillis()) / 60000 < COOLDOWN_MINUTES) {
-            return { ok: false, result: "cooldown" };
-        }
-    }
-    // 4️⃣ Time bucketing
-    const dt = luxon_1.DateTime.fromMillis(now.toMillis(), { zone: TZ });
-    const dayKey = dt.toFormat("yyyy-LL-dd");
-    const hour = dt.hour;
-    // 5️⃣ Atomic write
-    const scanRef = db.collection("scans").doc();
-    const statsRef = db.doc(`gyms/${gymId}/statsDaily/${dayKey}`);
-    await db.runTransaction(async (tx) => {
-        tx.set(scanRef, {
-            userId: uid,
-            gymId,
-            clientScanId,
-            deviceId,
-            scannedAt: admin.firestore.FieldValue.serverTimestamp(),
-            dayKey,
-            hour,
-            status: "accepted",
-        });
-        tx.set(statsRef, {
-            total: admin.firestore.FieldValue.increment(1),
-            [`hours.${hour}`]: admin.firestore.FieldValue.increment(1),
+    const description = `Fitbud Premium - ${String(plan.name || "Plan").trim()}`; // unencoded for checksum
+    const amount = amountToPaisas(price);
+    const clientId = DIRECTPAY_CLIENT_ID.value();
+    const clientSecret = DIRECTPAY_CLIENT_SECRET.value();
+    const baseUrl = DIRECTPAY_BASE_URL.value();
+    const appBase = APP_PUBLIC_BASE_URL.value();
+    // Checksum per doc:
+    // plainText = "DirectPay:{client_transaction_id}:{description}:{amount}"
+    const plainText = `DirectPay:${orderId}:${description}:${amount}`;
+    const checksum = hmacSha256Hex(plainText, clientSecret);
+    // Redirect URLs your WebView will intercept
+    const successRedirect = `${appBase}/payments/success?orderId=${encodeURIComponent(orderId)}`;
+    const failedRedirect = `${appBase}/payments/failed?orderId=${encodeURIComponent(orderId)}`;
+    const params = new URLSearchParams({
+        client_id: clientId,
+        client_transaction_id: orderId,
+        amount,
+        description,
+        payer_name: payerName,
+        email,
+        msisdn,
+        checksum,
+        success_redirect_url: successRedirect,
+        failed_redirect_url: failedRedirect,
+        currency: String(plan.currency || "PKR"),
+    });
+    const paymentUrl = `${baseUrl}?${params.toString()}`;
+    // Save pending subscription fields needed by finalize
+    await admin
+        .firestore()
+        .collection("users")
+        .doc(uid)
+        .collection("subscriptions")
+        .doc(orderId)
+        .set({
+        provider: "directpay_pwa",
+        orderId,
+        planId,
+        planName: (_g = plan.name) !== null && _g !== void 0 ? _g : "",
+        price: price,
+        currency: (_h = plan.currency) !== null && _h !== void 0 ? _h : "PKR",
+        durationDays,
+        status: "pending",
+        directPay: { paymentUrl, checksum },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    // Also mark on user (optional; your client already does it)
+    await admin.firestore().collection("users").doc(uid).set({
+        activePlanId: planId,
+        activeSubscriptionId: orderId,
+        isPremium: false,
+        premiumUntil: null,
+        premiumUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { paymentUrl };
+});
+// ---------- 2) Finalize From Redirect ----------
+exports.directPayFinalizeFromRedirect = (0, https_1.onCall)({
+    region: "asia-south1",
+    secrets: [APP_PUBLIC_BASE_URL],
+}, async (req) => {
+    var _a, _b, _c, _d, _e;
+    const uid = (_a = req.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    if (!uid)
+        throw new https_1.HttpsError("unauthenticated", "Login required");
+    const orderId = requireString((_b = req.data) === null || _b === void 0 ? void 0 : _b.orderId, "orderId");
+    const success = requireBool((_c = req.data) === null || _c === void 0 ? void 0 : _c.success, "success");
+    const subRef = admin.firestore().collection("users").doc(uid).collection("subscriptions").doc(orderId);
+    const subSnap = await subRef.get();
+    if (!subSnap.exists)
+        throw new https_1.HttpsError("not-found", "Subscription not found");
+    const sub = subSnap.data() || {};
+    if (sub.status === "active")
+        return { ok: true }; // idempotent
+    if (!success) {
+        await subRef.set({
+            status: "failed",
+            failedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
-    });
-    return { ok: true, scanId: scanRef.id, result: "accepted" };
+        await admin.firestore().collection("users").doc(uid).set({
+            isPremium: false,
+            premiumUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return { ok: true };
+    }
+    const durationDays = Number((_d = sub.durationDays) !== null && _d !== void 0 ? _d : 0);
+    if (!durationDays || durationDays <= 0) {
+        throw new https_1.HttpsError("failed-precondition", "Subscription durationDays missing/invalid");
+    }
+    const now = new Date();
+    const endAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    await subRef.set({
+        status: "active",
+        startAt: admin.firestore.Timestamp.fromDate(now),
+        endAt: admin.firestore.Timestamp.fromDate(endAt),
+        activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await admin.firestore().collection("users").doc(uid).set({
+        isPremium: true,
+        premiumUntil: admin.firestore.Timestamp.fromDate(endAt),
+        activeSubscriptionId: orderId,
+        activePlanId: (_e = sub.planId) !== null && _e !== void 0 ? _e : "",
+        premiumUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true, premiumUntil: endAt.toISOString() };
 });
 //# sourceMappingURL=index.js.map
