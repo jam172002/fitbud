@@ -45,7 +45,7 @@ export const scanGym = onCall(async (req) => {
   const idem = await db.collection("scans")
     .where("userId", "==", uid)
     .where("clientScanId", "==", clientScanId)
-    .limit(1)
+    .limpit(1)
     .get();
 
   if (!idem.empty) {

@@ -242,6 +242,26 @@ class ProfileScreen extends StatelessWidget {
                 Get.to(() => SettingsScreen());
               },
             ),
+            const SizedBox(height: 12),
+
+            _ProfileTile(
+              icon: LucideIcons.bolt,
+              title: 'Settings',
+              subtitle: 'View all app settings',
+              onTap: () {
+                Get.to(() => SettingsScreen());
+              },
+            ),
+            const SizedBox(height: 12),
+
+            _ProfileTile(
+              icon: LucideIcons.bolt,
+              title: 'Settings',
+              subtitle: 'View all app settings',
+              onTap: () {
+                Get.to(() => SettingsScreen());
+              },
+            ),
           ],
         ),
       ),
