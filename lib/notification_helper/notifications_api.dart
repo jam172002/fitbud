@@ -1,16 +1,12 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'dart:developer' as devtools show log;
 import 'package:googleapis_auth/auth_io.dart' as auth;
 
 
 class NotificationsApi {
-
-
 
 Future<bool> sendPushMessage({
   required String recipientToken,
@@ -44,7 +40,7 @@ Future<bool> sendPushMessage({
   
   client.close();
   if (response.statusCode == 200) {
-    return true; // Success!
+    return true;
   }
 
   devtools.log(
@@ -53,18 +49,14 @@ Future<bool> sendPushMessage({
   return false;
 }
 
-  /// Send push notification method
   Future<void> sendPushNotification({
     required String nTitle,
     required String nBody,
     required String nType,
     required String nSenderId,
     required String nUserDeviceToken,
-    // Call Info Map Data
     Map<String, dynamic>? nCallInfo,
   }) async {
-    // Variables
-    // final Uri url = Uri.parse('https://fcm.googleapis.com/fcm/send');
     final Uri url = Uri.parse('https://fcm.googleapis.com/v1/projects/sobbefy-21978/messages:send');
 
     await http
@@ -72,7 +64,6 @@ Future<bool> sendPushMessage({
       url,
       headers: <String, String>{
         'Content-Type': 'application/json',
-        // 'Authorization': 'key=${AppModel().appInfo.firebaseServerKey}',
         'Authorization': 'Bearer 764967386373-kpujbavqjdahbfr1ksktofia4id6b9t5.apps.googleusercontent.com',
       },
       body: jsonEncode(
@@ -88,7 +79,7 @@ Future<bool> sendPushMessage({
             'click_action': 'FLUTTER_NOTIFICATION_CLICK',
             "N_TYPE": nType,
             "N_SENDER_ID": nSenderId,
-            'call_info': nCallInfo, // Call Info Data
+            'call_info': nCallInfo,
             'status': 'done'
           },
           'to': nUserDeviceToken,

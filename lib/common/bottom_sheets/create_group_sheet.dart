@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -7,7 +6,6 @@ import 'package:fitbud/domain/models/auth/app_user.dart';
 import 'package:fitbud/domain/repos/repo_provider.dart';
 import 'package:fitbud/presentation/screens/chats/chat_screen.dart';
 import 'package:fitbud/utils/colors.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
@@ -39,8 +37,7 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
 
   List<AppUser> buddies = [];
 
-  Uint8List? _webBytes;
-  File? _file;
+  Uint8List? _imageBytes;
 
   @override
   void initState() {
@@ -93,41 +90,17 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
       withData: true,
     );
     if (res == null || res.files.isEmpty) return;
-
-    final f = res.files.single;
-    if (kIsWeb) {
-      if (f.bytes == null) return;
-      setState(() {
-        _webBytes = f.bytes!;
-        _file = null;
-      });
-    } else {
-      if (f.path == null) return;
-      setState(() {
-        _file = File(f.path!);
-        _webBytes = null;
-      });
-    }
+    final bytes = res.files.single.bytes;
+    if (bytes == null) return;
+    setState(() => _imageBytes = bytes);
   }
 
-  void _removeImage() {
-    setState(() {
-      _webBytes = null;
-      _file = null;
-    });
-  }
+  void _removeImage() => setState(() => _imageBytes = null);
 
   Future<String> _uploadGroupPhoto(String groupId) async {
-    if (_webBytes == null && _file == null) return '';
-
+    if (_imageBytes == null) return '';
     final ref = FirebaseStorage.instance.ref().child('groups/$groupId/avatar.jpg');
-    final meta = SettableMetadata(contentType: 'image/jpeg');
-
-    if (kIsWeb) {
-      await ref.putData(_webBytes!, meta);
-    } else {
-      await ref.putFile(_file!, meta);
-    }
+    await ref.putData(_imageBytes!, SettableMetadata(contentType: 'image/jpeg'));
     return await ref.getDownloadURL();
   }
 
@@ -249,15 +222,15 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
                       child: CircleAvatar(
                         radius: 40,
                         backgroundColor: XColors.secondaryBG,
-                        backgroundImage: kIsWeb
-                            ? (_webBytes != null ? MemoryImage(_webBytes!) : null)
-                            : (_file != null ? FileImage(_file!) : null) as ImageProvider?,
-                        child: (_webBytes == null && _file == null)
+                        backgroundImage: _imageBytes != null
+                            ? MemoryImage(_imageBytes!)
+                            : null,
+                        child: _imageBytes == null
                             ? Icon(LucideIcons.camera, color: XColors.primary, size: 28)
                             : null,
                       ),
                     ),
-                    if (_webBytes != null || _file != null)
+                    if (_imageBytes != null)
                       Positioned(
                         top: 0,
                         right: 0,

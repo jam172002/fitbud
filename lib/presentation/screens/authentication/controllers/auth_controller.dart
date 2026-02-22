@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
@@ -83,7 +84,7 @@ class AuthController extends GetxController {
   // - Save activities, favourite, gym, about, photoUrl, isProfileComplete=true
   // ---------------------------------------------------------------------------
   Future<AuthResult> completeProfileSetup({
-    required File profileImage,
+    required Uint8List imageBytes,
     required List<String> activities,
     required String favouriteActivity,
     required bool hasGym,
@@ -94,7 +95,7 @@ class AuthController extends GetxController {
       isLoading.value = true;
 
       // 1) Upload image
-      final photoUrl = await _repos.authRepo.uploadMyProfileImage(profileImage);
+      final photoUrl = await _repos.authRepo.uploadMyProfileImage(imageBytes);
       if (photoUrl == null || photoUrl.trim().isEmpty) {
         return AuthResult.fail('Image upload failed. Please try again.', code: 'upload_failed');
       }
@@ -122,20 +123,14 @@ class AuthController extends GetxController {
     }
   }
   Future<void> updateUserDeviceToken() async {
-    final _fcm = FirebaseMessaging.instance;
-    /// Get device token
-    final userDeviceToken = await _fcm.getToken();
-
-    /// Subscribe user to receive push notifications
-    await _fcm.subscribeToTopic("chat");
-
-    /// Update user device token
-    /// Check token result
+    if (kIsWeb) return;
+    final fcm = FirebaseMessaging.instance;
+    final userDeviceToken = await fcm.getToken();
+    await fcm.subscribeToTopic("chat");
     if (userDeviceToken != null) {
       await _repos.authRepo.updateMeFields({
-        "fcmTokens":userDeviceToken
+        "fcmTokens": userDeviceToken,
       });
-
     }
   }
 
