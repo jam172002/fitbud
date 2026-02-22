@@ -6,6 +6,9 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="FitBud - Your Fitness Buddy">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -21,28 +24,26 @@
 </head>
 <body>
   <script>
-    // Unregister all service workers and clear caches before loading Flutter.
-    // This prevents the blank screen caused by stale cached JavaScript after
-    // a recompile — the old service worker would serve outdated files that
-    // reference modules that no longer exist in the new build.
+    // Clear any stale service workers and caches from prior sessions,
+    // then load Flutter. A cache-busting timestamp on flutter_bootstrap.js
+    // ensures the browser always fetches the latest compiled JS.
     async function startApp() {
       if ('serviceWorker' in navigator) {
         try {
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(registrations.map(r => r.unregister()));
-          const cacheKeys = await caches.keys();
-          await Promise.all(cacheKeys.map(k => caches.delete(k)));
+          const regs = await navigator.serviceWorker.getRegistrations();
+          const keys = await caches.keys();
+          await Promise.all([
+            ...regs.map(r => r.unregister()),
+            ...keys.map(k => caches.delete(k)),
+          ]);
         } catch (e) {
-          // Non-fatal — continue loading Flutter regardless
-          console.warn('Service worker cleanup failed:', e);
+          console.warn('SW cleanup error:', e);
         }
       }
-      // Dynamically load Flutter bootstrap AFTER service workers are cleared
-      const script = document.createElement('script');
-      script.src = 'flutter_bootstrap.js';
-      document.body.appendChild(script);
+      const s = document.createElement('script');
+      s.src = 'flutter_bootstrap.js?v=' + Date.now();
+      document.body.appendChild(s);
     }
-
     startApp();
   </script>
 </body>

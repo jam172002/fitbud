@@ -1,24 +1,32 @@
-// Custom Flutter service worker that skips caching.
-// This prevents the stale-cache blank-screen issue in Replit's dev environment.
-// On install, skip waiting immediately so this worker activates right away.
-self.addEventListener('install', function(event) {
+// Custom Flutter service worker — development mode.
+// Goal: zero caching. Every request goes straight to the network so that
+// hot-restarts always serve fresh JS files and never show a blank screen.
+
+self.addEventListener('install', function (event) {
+  // Activate this worker immediately without waiting for old one to finish.
   self.skipWaiting();
 });
 
-// On activate, delete ALL old caches and claim every open client immediately.
-self.addEventListener('activate', function(event) {
+self.addEventListener('activate', function (event) {
+  // Delete all old caches and take control of all open pages immediately.
   event.waitUntil(
-    caches.keys().then(function(cacheNames) {
-      return Promise.all(cacheNames.map(function(name) {
-        return caches.delete(name);
-      }));
-    }).then(function() {
-      return self.clients.claim();
-    })
+    caches.keys()
+      .then(function (names) {
+        return Promise.all(names.map(function (n) { return caches.delete(n); }));
+      })
+      .then(function () { return self.clients.claim(); })
   );
 });
 
-// Pass every request straight through to the network — no caching at all.
-self.addEventListener('fetch', function(event) {
-  event.respondWith(fetch(event.request));
+self.addEventListener('fetch', function (event) {
+  // Pass every request to the network with cache: 'reload' so the browser's
+  // own HTTP cache is also bypassed — prevents stale .dart.js files after
+  // a hot-restart that changed file hashes.
+  event.respondWith(
+    fetch(event.request, { cache: 'reload' }).catch(function () {
+      // If the network is unreachable, fall back to a regular fetch
+      // (which may hit browser cache) rather than showing an error.
+      return fetch(event.request);
+    })
+  );
 });
