@@ -262,7 +262,7 @@ export const onNewMessage = onDocumentCreated(
 // ---------------------------------------------------------------------------
 // scanGym (existing — typo fix: limpit → limit)
 // ---------------------------------------------------------------------------
-export const scanGym = onCall(async (req) => {
+export const scanGym = onCall({ enforceAppCheck: false }, async (req) => {
   const uid = req.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "User is not signed in.");
 

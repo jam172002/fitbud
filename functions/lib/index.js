@@ -213,7 +213,7 @@ exports.onNewMessage = (0, firestore_1.onDocumentCreated)("conversations/{conver
 // ---------------------------------------------------------------------------
 // scanGym (existing — typo fix: limpit → limit)
 // ---------------------------------------------------------------------------
-exports.scanGym = (0, https_1.onCall)(async (req) => {
+exports.scanGym = (0, https_1.onCall)({ enforceAppCheck: false }, async (req) => {
     var _a, _b, _c, _d, _e, _f, _g, _h;
     const uid = (_a = req.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
