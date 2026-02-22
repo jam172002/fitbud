@@ -101,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(95),
         child: Obx(() {
-          final me = home.me.value;
+          final me = home.me;
 
           return CustomHomeAppBar(
             name: (me?.displayName?.trim().isNotEmpty == true)

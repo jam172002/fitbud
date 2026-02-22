@@ -67,7 +67,9 @@ Future<void> main() async {
   Get.put<LocationController>(LocationController(), permanent: true);
   Get.put<PremiumPlanController>(PremiumPlanController(), permanent: true);
 
-  authController.authUser.listen((user) {
+  // Store the subscription so it can be cancelled if needed.
+  // ignore: unused_local_variable
+  final _authListen = authController.authUser.listen((user) {
     if (user != null) {
       authController.updateUserDeviceToken();
     }

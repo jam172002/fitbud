@@ -1,7 +1,7 @@
 # FitBud - Flutter Fitness App
 
 ## Project Overview
-FitBud is a Flutter-based fitness app that supports gym management, workout sessions, user authentication, and fitness buddy matching. It uses Firebase as the backend.
+FitBud is a Flutter-based fitness app that supports gym management, workout sessions, user authentication, and fitness buddy matching. It uses Firebase as the backend. The app runs on both mobile (iOS/Android) and web.
 
 ## Architecture
 - **Framework**: Flutter 3.32.0 (Dart 3.8.0) via Nix

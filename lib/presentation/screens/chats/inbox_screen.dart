@@ -144,7 +144,7 @@ class _InboxScreenState extends State<InboxScreen> {
               const SizedBox(height: 16),
               Expanded(
                 child: StreamBuilder<List<(UserConversationIndex idx, Conversation? conv)>>(
-                  stream: repos.chatRepo.watchMyInbox(limit: 100),
+                  stream: repos.chatRepo.watchMyInbox(limit: 30),
                   builder: (context, snap) {
                     if (snap.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());

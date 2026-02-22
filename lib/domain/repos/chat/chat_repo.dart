@@ -64,40 +64,21 @@ class ChatRepo extends RepoBase {
   // -----------------------------
   // Inbox
   // -----------------------------
-  Stream<List<(UserConversationIndex idx, Conversation? conv)>> watchMyInbox({int limit = 50}) {
+  Stream<List<(UserConversationIndex idx, Conversation? conv)>> watchMyInbox({int limit = 30}) {
     final uid = _uid();
 
-    // NOTE: FirestorePaths.userConversations(uid) is now alias to userInbox(uid)
+    // Return index documents directly — all display data (title, lastMessage,
+    // unreadCount, type) is already stored in the index by Cloud Functions.
+    // Fetching the Conversation document on every stream event was causing
+    // N additional Firestore reads per message update, which is the main
+    // cause of the app slowing down over time.
     return col(FirestorePaths.userConversations(uid))
         .orderBy('updatedAt', descending: true)
         .limit(limit)
         .snapshots()
-        .asyncMap((idxSnap) async {
+        .map((idxSnap) {
       final idxItems = idxSnap.docs.map(UserConversationIndex.fromDoc).toList();
-      if (idxItems.isEmpty) return <(UserConversationIndex, Conversation?)>[];
-
-      final ids = idxItems
-          .map((e) => _cleanId(e.conversationId))
-          .where((e) => e.isNotEmpty)
-          .toList();
-
-      if (ids.isEmpty) return <(UserConversationIndex, Conversation?)>[];
-
-      final convMap = <String, Conversation>{};
-
-      for (var i = 0; i < ids.length; i += 10) {
-        final chunk = ids.sublist(i, (i + 10).clamp(0, ids.length));
-        final snap = await db
-            .collection(FirestorePaths.conversations)
-            .where(FieldPath.documentId, whereIn: chunk)
-            .get();
-
-        for (final d in snap.docs) {
-          convMap[d.id] = Conversation.fromDoc(d);
-        }
-      }
-
-      return idxItems.map((idx) => (idx, convMap[_cleanId(idx.conversationId)])).toList();
+      return idxItems.map((idx) => (idx, null as Conversation?)).toList();
     });
   }
 
@@ -264,7 +245,7 @@ class ChatRepo extends RepoBase {
   // -----------------------------
   // Messages
   // -----------------------------
-  Stream<List<Message>> watchMessages(String conversationId, {int limit = 100}) {
+  Stream<List<Message>> watchMessages(String conversationId, {int limit = 50}) {
     final id = _cleanId(conversationId);
     if (id.isEmpty) return const Stream.empty();
 

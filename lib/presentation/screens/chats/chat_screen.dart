@@ -653,7 +653,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     //final parts = partSnap.data ?? const <ConversationParticipant>[];
 
                     return StreamBuilder<List<Message>>(
-                      stream: repos.chatRepo.watchMessages(widget.conversationId, limit: 200),
+                      stream: repos.chatRepo.watchMessages(widget.conversationId, limit: 50),
                       builder: (context, snap) {
                         final msgsRaw = snap.data ?? const <Message>[];
 

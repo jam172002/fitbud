@@ -8,46 +8,43 @@ import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/models/product/product.dart';
 import '../../../domain/models/sessions/session_invite.dart';
 import '../../../domain/repos/sessions/session_repo.dart';
+import '../authentication/controllers/auth_controller.dart';
 
 class HomeController extends GetxController {
   HomeController({
     FirebaseFirestore? db,
     FirebaseAuth? auth,
   })  : _db = db ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance,
         _sessionRepo = SessionRepo(db ?? FirebaseFirestore.instance, auth ?? FirebaseAuth.instance);
 
   final FirebaseFirestore _db;
-  final FirebaseAuth _auth;
-  // Repo
   final SessionRepo _sessionRepo;
-  final Rxn<AppUser> me = Rxn<AppUser>();
-  bool get hasPremium => me.value?.hasPremiumAccess == true;
+
+  // me is read from AuthController — no extra Firestore listener needed.
+  AppUser? get me => Get.find<AuthController>().me.value;
+  bool get hasPremium => me?.hasPremiumAccess == true;
 
   final RxList<Product> products = <Product>[].obs;
   final RxList<SessionInvite> invites = <SessionInvite>[].obs;
 
-  final RxBool loadingMe = true.obs;
   final RxBool loadingProducts = true.obs;
   final RxBool loadingInvites = true.obs;
 
-  final RxString errMe = ''.obs;
   final RxString errProducts = ''.obs;
   final RxString errInvites = ''.obs;
 
-  StreamSubscription? _meSub;
   StreamSubscription? _prodSub;
   StreamSubscription? _invSub;
+
   final RxList<Activity> activities = <Activity>[].obs;
   final RxBool loadingActivities = false.obs;
   final RxString errActivities = ''.obs;
-
 
   Future<void> fetchActivities() async {
     loadingActivities.value = true;
     errActivities.value = '';
     try {
-      final snap = await FirebaseFirestore.instance
+      final snap = await _db
           .collection('activities')
           .where('isActive', isEqualTo: true)
           .orderBy('order')
@@ -67,35 +64,9 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _listenMe();
     _listenProducts();
     _listenInvites();
     fetchActivities();
-  }
-
-  void _listenMe() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) {
-      loadingMe.value = false;
-      errMe.value = 'User not signed in';
-      return;
-    }
-
-    loadingMe.value = true;
-    errMe.value = '';
-
-    _meSub?.cancel();
-    _meSub = _db.collection('users').doc(uid).snapshots().listen((snap) {
-      if (!snap.exists) {
-        me.value = null;
-      } else {
-        me.value = AppUser.fromDoc(snap);
-      }
-      loadingMe.value = false;
-    }, onError: (e) {
-      loadingMe.value = false;
-      errMe.value = e.toString();
-    });
   }
 
   void _listenProducts() {
@@ -123,8 +94,6 @@ class HomeController extends GetxController {
     errInvites.value = '';
 
     _invSub?.cancel();
-
-    // Uses your existing SessionRepo logic (collectionGroup('invites'))
     _invSub = _sessionRepo.watchMySessionInvites().listen((list) {
       invites.value = list;
       loadingInvites.value = false;
@@ -136,7 +105,6 @@ class HomeController extends GetxController {
 
   @override
   void onClose() {
-    _meSub?.cancel();
     _prodSub?.cancel();
     _invSub?.cancel();
     super.onClose();
