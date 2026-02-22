@@ -20,7 +20,6 @@ class HomeController extends GetxController {
   final FirebaseFirestore _db;
   final SessionRepo _sessionRepo;
 
-  // me is read from AuthController — no extra Firestore listener needed.
   AppUser? get me => Get.find<AuthController>().me.value;
   bool get hasPremium => me?.hasPremiumAccess == true;
 
@@ -40,7 +39,14 @@ class HomeController extends GetxController {
   final RxBool loadingActivities = false.obs;
   final RxString errActivities = ''.obs;
 
-  Future<void> fetchActivities() async {
+  DateTime? _activitiesLoadedAt;
+
+  Future<void> fetchActivities({bool force = false}) async {
+    if (!force && activities.isNotEmpty && _activitiesLoadedAt != null) {
+      final age = DateTime.now().difference(_activitiesLoadedAt!);
+      if (age.inMinutes < 30) return;
+    }
+
     loadingActivities.value = true;
     errActivities.value = '';
     try {
@@ -49,11 +55,12 @@ class HomeController extends GetxController {
           .where('isActive', isEqualTo: true)
           .orderBy('order')
           .limit(50)
-          .get();
+          .get(const GetOptions(source: Source.serverAndCache));
 
       activities.assignAll(
         snap.docs.map((d) => Activity.fromDoc(d)).toList(),
       );
+      _activitiesLoadedAt = DateTime.now();
     } catch (e) {
       errActivities.value = e.toString();
     } finally {

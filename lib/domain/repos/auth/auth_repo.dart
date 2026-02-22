@@ -14,6 +14,10 @@ class AuthRepo extends RepoBase {
   final FirebaseAuth auth;
   AuthRepo(super.db, this.auth);
 
+  final Map<String, AppUser> _userCache = {};
+  final Map<String, DateTime> _userCacheTime = {};
+  static const _userCacheTtl = Duration(minutes: 5);
+
   Stream<User?> authState() => auth.authStateChanges();
 
   String requireUid() {
@@ -34,9 +38,23 @@ class AuthRepo extends RepoBase {
   }
 
   Future<AppUser> getUser(String uid) async {
+    final cached = _userCache[uid];
+    final cachedAt = _userCacheTime[uid];
+    if (cached != null && cachedAt != null &&
+        DateTime.now().difference(cachedAt) < _userCacheTtl) {
+      return cached;
+    }
     final snap = await doc('${FirestorePaths.users}/$uid').get();
     if (!snap.exists) throw NotFoundException('User not found');
-    return AppUser.fromDoc(snap);
+    final user = AppUser.fromDoc(snap);
+    _userCache[uid] = user;
+    _userCacheTime[uid] = DateTime.now();
+    return user;
+  }
+
+  void invalidateUserCache(String uid) {
+    _userCache.remove(uid);
+    _userCacheTime.remove(uid);
   }
 
   Future<void> upsertMe({

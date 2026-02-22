@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:fitbud/presentation/screens/chats/widget/add_members_to_group_dialog.dart';
 import 'package:fitbud/presentation/screens/chats/widget/chat_input_bar.dart';
@@ -59,7 +61,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   bool _isTyping = false;
   bool _sending = false;
-  bool _uploadingImage = false;
+  final List<_PendingMedia> _pendingMedias = [];
 
   List<String> _cachedParticipantIds = [];
   StreamSubscription<List<ConversationParticipant>>? _partSub;
@@ -247,74 +249,199 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // -------------------- media: cross-platform pick + upload + send --------------------
-  Future<void> _pickMedia() async {
-    if (_uploadingImage) return;
+  // -------------------- WhatsApp-style attachment flow --------------------
+
+  void _showAttachmentSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: XColors.secondaryBG,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: XColors.secondaryText.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _AttachOption(
+                  icon: Icons.photo_library_rounded,
+                  label: 'Photo',
+                  color: Colors.purple,
+                  onTap: () { Navigator.pop(ctx); _pickFileForType(MessageType.image); },
+                ),
+                _AttachOption(
+                  icon: Icons.videocam_rounded,
+                  label: 'Video',
+                  color: Colors.red,
+                  onTap: () { Navigator.pop(ctx); _pickFileForType(MessageType.video); },
+                ),
+                _AttachOption(
+                  icon: Icons.insert_drive_file_rounded,
+                  label: 'Document',
+                  color: Colors.blue,
+                  onTap: () { Navigator.pop(ctx); _pickFileForType(MessageType.file); },
+                ),
+                _AttachOption(
+                  icon: Icons.headset_rounded,
+                  label: 'Audio',
+                  color: Colors.orange,
+                  onTap: () { Navigator.pop(ctx); _pickFileForType(MessageType.audio); },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickFileForType(MessageType type) async {
+    final fileType = switch (type) {
+      MessageType.image => FileType.image,
+      MessageType.video => FileType.video,
+      MessageType.audio => FileType.audio,
+      _ => FileType.any,
+    };
 
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
+        type: fileType,
         allowMultiple: false,
         withData: true,
       );
       if (result == null || result.files.isEmpty) return;
 
-      final picked = result.files.single;
-
+      final file = result.files.single;
       Uint8List? bytes;
-      String ext = 'jpg';
-      String mimeType = 'image/jpeg';
 
       if (kIsWeb) {
-        bytes = picked.bytes;
-        if (bytes == null) {
-          _showError('Could not read image on web.');
-          return;
-        }
-      } else {
-        final path = picked.path;
-        if (path == null) {
-          _showError('Could not access image file.');
-          return;
-        }
-        bytes = await File(path).readAsBytes();
+        bytes = file.bytes;
+      } else if (file.path != null) {
+        bytes = await File(file.path!).readAsBytes();
       }
 
-      final name = picked.name.toLowerCase();
-      if (name.endsWith('.png')) {
-        ext = 'png';
-        mimeType = 'image/png';
-      } else if (name.endsWith('.gif')) {
-        ext = 'gif';
-        mimeType = 'image/gif';
-      } else if (name.endsWith('.webp')) {
-        ext = 'webp';
-        mimeType = 'image/webp';
+      if (bytes == null) {
+        _showError('Could not read file.');
+        return;
       }
 
-      if (mounted) setState(() => _uploadingImage = true);
+      final name = file.name;
+      final ext = name.contains('.') ? name.split('.').last.toLowerCase() : 'bin';
+      final mimeType = _getMimeType(ext, type);
 
-      final url = await repos.mediaRepo.uploadChatMediaBytes(
-        conversationId: widget.conversationId,
+      final picked = _PickedMedia(
         bytes: bytes,
+        fileName: name,
         ext: ext,
         mimeType: mimeType,
+        type: type,
+        fileSize: bytes.length,
       );
+
+      if (!mounted) return;
+      await _showPreviewSheet(picked);
+    } catch (e) {
+      _showError('Failed to pick file: $e');
+    }
+  }
+
+  String _getMimeType(String ext, MessageType type) {
+    const map = {
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+      'gif': 'image/gif', 'webp': 'image/webp', 'heic': 'image/heic',
+      'mp4': 'video/mp4', 'mov': 'video/quicktime', 'avi': 'video/x-msvideo',
+      'mp3': 'audio/mpeg', 'aac': 'audio/aac', 'wav': 'audio/wav', 'm4a': 'audio/mp4',
+      'pdf': 'application/pdf', 'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+    return map[ext] ?? 'application/octet-stream';
+  }
+
+  Future<void> _showPreviewSheet(_PickedMedia picked) async {
+    final shouldSend = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: XColors.secondaryBG,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _MediaPreviewSheet(picked: picked),
+    );
+
+    if (shouldSend == true && mounted) {
+      await _sendMedia(picked);
+    }
+  }
+
+  Future<void> _sendMedia(_PickedMedia picked) async {
+    final clientId = DateTime.now().microsecondsSinceEpoch.toString();
+    final pending = _PendingMedia(
+      clientId: clientId,
+      picked: picked,
+      localTime: DateTime.now(),
+    );
+
+    setState(() => _pendingMedias.add(pending));
+    _scrollToBottom();
+
+    try {
+      final url = await repos.mediaRepo.uploadChatMediaBytes(
+        conversationId: widget.conversationId,
+        bytes: picked.bytes,
+        ext: picked.ext,
+        mimeType: picked.mimeType,
+      );
+
+      if (mounted) {
+        setState(() {
+          final idx = _pendingMedias.indexWhere((p) => p.clientId == clientId);
+          if (idx >= 0) _pendingMedias[idx] = pending.copyWithUrl(url);
+        });
+      }
 
       await repos.chatRepo.sendMessage(
         conversationId: widget.conversationId,
-        type: MessageType.image,
+        type: picked.type,
         mediaUrl: url,
         text: '',
         participantIds: _cachedParticipantIds.isNotEmpty ? _cachedParticipantIds : null,
       );
 
       _scrollToBottom();
+      await _markRead();
     } catch (e) {
-      _showError('Failed to send image: $e');
-    } finally {
-      if (mounted) setState(() => _uploadingImage = false);
+      if (mounted) setState(() => _pendingMedias.removeWhere((p) => p.clientId == clientId));
+      _showError('Failed to send: $e');
     }
+  }
+
+  void _reconcileMedia({required List<Message> msgs, required String myUid}) {
+    if (_pendingMedias.isEmpty) return;
+    final toRemove = <String>{};
+    for (final pm in _pendingMedias) {
+      if (pm.uploadedUrl == null) continue;
+      final matched = msgs.any((m) =>
+          m.senderUserId == myUid && m.mediaUrl == pm.uploadedUrl);
+      if (matched) toRemove.add(pm.clientId);
+    }
+    if (toRemove.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _pendingMedias.removeWhere((p) => toRemove.contains(p.clientId)));
+    });
   }
 
   void _showError(String msg) {
@@ -671,10 +798,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                           _markDeliveredSafe(); // safe/no-op until you add repo method
                         }
 
-                        // NEW: reconcile pending with Firestore confirmations
+                        // Reconcile pending text messages
                         _reconcilePending(firestoreMessages: msgs, myUid: uid);
+                        // Reconcile pending media messages
+                        _reconcileMedia(msgs: msgs, myUid: uid);
 
                         final combined = <dynamic>[
+                          ..._pendingMedias,
                           ..._pendingTexts,
                           ...msgs,
                         ];
@@ -708,6 +838,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                             }
 
                             final item = combined[index];
+
+                            // Pending media bubble (optimistic — shows while uploading)
+                            if (item is _PendingMedia) {
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                child: _PendingMediaBubble(pending: item),
+                              );
+                            }
 
                             // Pending text bubble (optimistic)
                             if (item is _PendingText) {
@@ -769,8 +907,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           ChatInputBar(
             controller: _messageController,
             onSend: _sendTextMessage,
-            onPickMedia: _pickMedia,
-            isUploadingImage: _uploadingImage,
+            onAttach: _showAttachmentSheet,
+            isUploading: _pendingMedias.isNotEmpty,
           ),
         ],
       ),
@@ -861,26 +999,23 @@ class _ImageBubble extends StatelessWidget {
                     ? const Radius.circular(4)
                     : const Radius.circular(16),
               ),
-              child: Image.network(
-                url,
+              child: CachedNetworkImage(
+                imageUrl: url,
                 height: 200,
                 width: 200,
                 fit: BoxFit.cover,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
-                    height: 200,
-                    width: 200,
-                    color: XColors.secondaryBG,
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        color: XColors.primary,
-                        strokeWidth: 2,
-                      ),
+                placeholder: (context, url) => Container(
+                  height: 200,
+                  width: 200,
+                  color: XColors.secondaryBG,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: XColors.primary,
+                      strokeWidth: 2,
                     ),
-                  );
-                },
-                errorBuilder: (context, error, stack) => Container(
+                  ),
+                ),
+                errorWidget: (context, url, error) => Container(
                   height: 200,
                   width: 200,
                   color: XColors.secondaryBG,
@@ -897,6 +1032,340 @@ class _ImageBubble extends StatelessWidget {
             time,
             style: const TextStyle(
                 color: XColors.secondaryText, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ======================== DATA MODELS ========================
+
+class _PickedMedia {
+  final Uint8List bytes;
+  final String fileName;
+  final String ext;
+  final String mimeType;
+  final MessageType type;
+  final int fileSize;
+
+  const _PickedMedia({
+    required this.bytes,
+    required this.fileName,
+    required this.ext,
+    required this.mimeType,
+    required this.type,
+    required this.fileSize,
+  });
+}
+
+class _PendingMedia {
+  final String clientId;
+  final _PickedMedia picked;
+  final DateTime localTime;
+  final String? uploadedUrl;
+
+  const _PendingMedia({
+    required this.clientId,
+    required this.picked,
+    required this.localTime,
+    this.uploadedUrl,
+  });
+
+  _PendingMedia copyWithUrl(String url) => _PendingMedia(
+        clientId: clientId,
+        picked: picked,
+        localTime: localTime,
+        uploadedUrl: url,
+      );
+}
+
+// ======================== ATTACHMENT OPTION BUTTON ========================
+
+class _AttachOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _AttachOption({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: XColors.primaryText,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ======================== MEDIA PREVIEW SHEET ========================
+
+class _MediaPreviewSheet extends StatelessWidget {
+  final _PickedMedia picked;
+
+  const _MediaPreviewSheet({required this.picked});
+
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  IconData _typeIcon(MessageType t) {
+    switch (t) {
+      case MessageType.video:
+        return Icons.videocam_rounded;
+      case MessageType.audio:
+        return Icons.headset_rounded;
+      default:
+        return Icons.insert_drive_file_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: XColors.secondaryText.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Send ${picked.type == MessageType.image ? 'Photo' : picked.type == MessageType.video ? 'Video' : picked.type == MessageType.audio ? 'Audio' : 'File'}',
+            style: const TextStyle(
+              color: XColors.primaryText,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (picked.type == MessageType.image)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.memory(
+                picked.bytes,
+                height: 260,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: XColors.primaryBG,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: XColors.primary.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(_typeIcon(picked.type),
+                        color: XColors.primary, size: 28),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          picked.fileName,
+                          style: const TextStyle(
+                            color: XColors.primaryText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatSize(picked.fileSize),
+                          style: const TextStyle(
+                            color: XColors.secondaryText,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: XColors.secondaryText),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: XColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Send',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ======================== PENDING MEDIA BUBBLE ========================
+
+class _PendingMediaBubble extends StatelessWidget {
+  final _PendingMedia pending;
+
+  const _PendingMediaBubble({required this.pending});
+
+  IconData _typeIcon(MessageType t) {
+    switch (t) {
+      case MessageType.video:
+        return Icons.videocam_rounded;
+      case MessageType.audio:
+        return Icons.headset_rounded;
+      default:
+        return Icons.insert_drive_file_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isImage = pending.picked.type == MessageType.image;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+              bottomLeft: Radius.circular(16),
+              bottomRight: Radius.circular(4),
+            ),
+            child: Stack(
+              children: [
+                if (isImage)
+                  Image.memory(
+                    pending.picked.bytes,
+                    height: 200,
+                    width: 200,
+                    fit: BoxFit.cover,
+                  )
+                else
+                  Container(
+                    height: 72,
+                    width: 220,
+                    color: XColors.secondaryBG,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(_typeIcon(pending.picked.type),
+                            color: XColors.primary, size: 30),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            pending.picked.fileName,
+                            style: const TextStyle(
+                                color: XColors.primaryText, fontSize: 12),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                // Uploading overlay with clock icon
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Iconsax.clock, size: 12, color: XColors.secondaryText),
+              SizedBox(width: 3),
+              Text('Sending…',
+                  style:
+                      TextStyle(color: XColors.secondaryText, fontSize: 10)),
+            ],
           ),
         ],
       ),

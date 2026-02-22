@@ -56,8 +56,29 @@ Push notifications are handled end-to-end:
 - Terms & Conditions checkbox is required before account creation
 - Checkbox links to both the Terms & Conditions and Privacy Policy screens in-app
 
+## Chat System
+- Chat screen: `lib/presentation/screens/chats/chat_screen.dart`
+- Inbox screen: `lib/presentation/screens/chats/inbox_screen.dart`
+- Chat input bar: `lib/presentation/screens/chats/widget/chat_input_bar.dart`
+- **WhatsApp-style media sharing**: Attachment button opens a bottom sheet with Photo/Video/Document/Audio options
+- **Preview before send**: Selected media is shown in a preview sheet for confirmation before upload
+- **Optimistic UI**: Pending media bubbles appear immediately (with upload progress overlay), then reconciled once Firestore confirms the message
+- **Pending text messages**: Text messages show immediately with a clock icon while the server processes them
+
+## Caching & Performance
+- **Firestore offline persistence**: Enabled in `main.dart` — unlimited cache on mobile, `synchronizeTabs` on web
+- **Activity caching**: `HomeController` caches activity data for 30 minutes in-memory (avoids re-fetching on every screen visit)
+- **User profile cache**: `AuthRepo.getUser()` caches profiles in-memory with 5-minute TTL — all callers benefit automatically
+- **Image caching**: `cached_network_image` package used for network images
+
+## Web Configuration
+- Custom `web/flutter_service_worker.js` bypasses all caching in development to prevent stale JavaScript issues
+- Firebase App Check web guard in `main.dart` prevents App Check from blocking web requests
+- Scan feature uses `enforceAppCheck: false` in the Cloud Function (`functions/src/index.ts`)
+
 ## Notes
 - The app requires Firebase configuration to run properly
 - Firebase App Check is configured for Android in production, debug mode in debug builds
 - The app has web support but is primarily designed for mobile (Android/iOS)
 - Cloud Functions are in TypeScript under `functions/` — build with `npx tsc` in that directory
+- To deploy Cloud Function changes: `firebase deploy --only functions` from the `functions/` directory

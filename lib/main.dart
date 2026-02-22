@@ -1,4 +1,5 @@
 // lib/main.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:fitbud/notification_helper/my_notification.dart';
@@ -24,6 +25,21 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Enable Firestore offline persistence so data loads from cache instantly
+  // on repeat visits — major speed improvement on slow connections.
+  if (kIsWeb) {
+    try {
+      await FirebaseFirestore.instance.enablePersistence(
+        const PersistenceSettings(synchronizeTabs: true),
+      );
+    } catch (_) {}
+  } else {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  }
 
   if (!kIsWeb) {
     FirebaseMessaging.onBackgroundMessage(myBackgroundMessageHandler);
