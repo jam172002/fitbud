@@ -29,10 +29,12 @@ Future<void> main() async {
     FirebaseMessaging.onBackgroundMessage(myBackgroundMessageHandler);
   }
 
-  await FirebaseAppCheck.instance.activate(
-    androidProvider:
-        kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-  );
+  if (!kIsWeb) {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider:
+          kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+    );
+  }
 
   if (!kIsWeb) {
     await FirebaseMessaging.instance.requestPermission(

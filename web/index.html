@@ -1,38 +1,49 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="FitBud - Your Fitness Buddy">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="fitbud">
+  <meta name="apple-mobile-web-app-title" content="FitBud">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>fitbud</title>
+  <title>FitBud</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Unregister all service workers and clear caches before loading Flutter.
+    // This prevents the blank screen caused by stale cached JavaScript after
+    // a recompile — the old service worker would serve outdated files that
+    // reference modules that no longer exist in the new build.
+    async function startApp() {
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map(r => r.unregister()));
+          const cacheKeys = await caches.keys();
+          await Promise.all(cacheKeys.map(k => caches.delete(k)));
+        } catch (e) {
+          // Non-fatal — continue loading Flutter regardless
+          console.warn('Service worker cleanup failed:', e);
+        }
+      }
+      // Dynamically load Flutter bootstrap AFTER service workers are cleared
+      const script = document.createElement('script');
+      script.src = 'flutter_bootstrap.js';
+      document.body.appendChild(script);
+    }
+
+    startApp();
+  </script>
 </body>
 </html>
