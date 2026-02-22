@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -6,11 +7,11 @@ import 'package:fitbud/presentation/screens/chats/widget/chat_input_bar.dart';
 import 'package:fitbud/presentation/screens/chats/widget/full_screen_media.dart';
 import 'package:fitbud/presentation/screens/chats/widget/members_dialog.dart';
 import 'package:fitbud/presentation/screens/chats/widget/received_message_bubble.dart';
-import 'package:fitbud/presentation/screens/chats/widget/sent_media_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/sent_message_bubble.dart';
 import 'package:fitbud/presentation/screens/chats/widget/typing_indicator.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:fitbud/utils/enums.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
@@ -56,13 +57,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _messageController = TextEditingController();
 
-  bool _isTyping = false; // (keep UI; wire later)
+  bool _isTyping = false;
   bool _sending = false;
+  bool _uploadingImage = false;
 
-  // for media preview only (optional)
-  final List<Map<String, dynamic>> _localMediaMessages = [];
+  List<String> _cachedParticipantIds = [];
+  StreamSubscription<List<ConversationParticipant>>? _partSub;
 
-  // -------------------- NEW: optimistic pending messages --------------------
+  // -------------------- optimistic pending messages --------------------
   final List<_PendingText> _pendingTexts = [];
 
   @override
@@ -70,10 +72,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.initState();
     _markRead();
     _isTyping = false;
+    _partSub = repos.chatRepo
+        .watchParticipants(widget.conversationId)
+        .listen((parts) {
+      if (mounted) {
+        setState(() {
+          _cachedParticipantIds = parts.map((p) => p.userId).toList();
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _partSub?.cancel();
     _scrollController.dispose();
     _messageController.dispose();
     super.dispose();
@@ -216,6 +228,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         conversationId: widget.conversationId,
         type: MessageType.text,
         text: text,
+        participantIds: _cachedParticipantIds.isNotEmpty ? _cachedParticipantIds : null,
       );
 
       _scrollToBottom();
@@ -234,44 +247,92 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // -------------------- media preview --------------------
+  // -------------------- media: cross-platform pick + upload + send --------------------
   Future<void> _pickMedia() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.media,
-      allowMultiple: false,
-    );
-    if (result == null || result.files.single.path == null) return;
+    if (_uploadingImage) return;
 
-    final file = File(result.files.single.path!);
-    final p = file.path.toLowerCase();
-    final isVideo = p.endsWith('.mp4') || p.endsWith('.mov');
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
 
-    setState(() {
-      _localMediaMessages.add({
-        'file': file,
-        'isVideo': isVideo,
-        'time': _timeLabel(DateTime.now()),
-        'isSent': true,
-      });
-    });
+      final picked = result.files.single;
 
-    _scrollToBottom();
+      Uint8List? bytes;
+      String ext = 'jpg';
+      String mimeType = 'image/jpeg';
 
+      if (kIsWeb) {
+        bytes = picked.bytes;
+        if (bytes == null) {
+          _showError('Could not read image on web.');
+          return;
+        }
+      } else {
+        final path = picked.path;
+        if (path == null) {
+          _showError('Could not access image file.');
+          return;
+        }
+        bytes = await File(path).readAsBytes();
+      }
+
+      final name = picked.name.toLowerCase();
+      if (name.endsWith('.png')) {
+        ext = 'png';
+        mimeType = 'image/png';
+      } else if (name.endsWith('.gif')) {
+        ext = 'gif';
+        mimeType = 'image/gif';
+      } else if (name.endsWith('.webp')) {
+        ext = 'webp';
+        mimeType = 'image/webp';
+      }
+
+      if (mounted) setState(() => _uploadingImage = true);
+
+      final url = await repos.mediaRepo.uploadChatMediaBytes(
+        conversationId: widget.conversationId,
+        bytes: bytes,
+        ext: ext,
+        mimeType: mimeType,
+      );
+
+      await repos.chatRepo.sendMessage(
+        conversationId: widget.conversationId,
+        type: MessageType.image,
+        mediaUrl: url,
+        text: '',
+        participantIds: _cachedParticipantIds.isNotEmpty ? _cachedParticipantIds : null,
+      );
+
+      _scrollToBottom();
+    } catch (e) {
+      _showError('Failed to send image: $e');
+    } finally {
+      if (mounted) setState(() => _uploadingImage = false);
+    }
+  }
+
+  void _showError(String msg) {
     Get.snackbar(
-      "Info",
-      "Media preview added. Upload/sending mediaUrl can be enabled next.",
-      backgroundColor: XColors.primary.withValues(alpha: .2),
+      'Error',
+      msg,
+      backgroundColor: XColors.danger.withValues(alpha: .2),
       colorText: XColors.primaryText,
     );
   }
 
-  void _openFullScreen(File file, {required bool isVideo}) {
+  void _openNetworkImageFullScreen(String url) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => FullScreenMedia(
-          path: file.path,
-          isVideo: isVideo,
+          path: url,
+          isVideo: false,
           isAsset: false,
         ),
       ),
@@ -613,9 +674,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         // NEW: reconcile pending with Firestore confirmations
                         _reconcilePending(firestoreMessages: msgs, myUid: uid);
 
-                        // Keep your existing combined behavior, but include pending texts
                         final combined = <dynamic>[
-                          ..._localMediaMessages,
                           ..._pendingTexts,
                           ...msgs,
                         ];
@@ -650,23 +709,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
                             final item = combined[index];
 
-                            // Local media preview bubble
-                            if (item is Map<String, dynamic> && item.containsKey('file')) {
-                              final file = item['file'] as File;
-                              final isVideo = item['isVideo'] as bool;
-                              final time = item['time'] as String;
-                              return Container(
-                                margin: const EdgeInsets.symmetric(vertical: 8),
-                                child: SentMedia(
-                                  file: file,
-                                  isVideo: isVideo,
-                                  time: time,
-                                  onTap: () => _openFullScreen(file, isVideo: isVideo),
-                                ),
-                              );
-                            }
-
-                            // NEW: Pending text bubble (clock)
+                            // Pending text bubble (optimistic)
                             if (item is _PendingText) {
                               final time = _timeLabel(item.localTime);
                               return Container(
@@ -683,28 +726,30 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                             final isSent = m.senderUserId == uid;
                             final time = _timeLabel(m.createdAt);
 
-                            if (m.type != MessageType.text) {
-                              final fallback = m.text.isNotEmpty ? m.text : 'Message';
+                            // Image bubble
+                            if (m.type == MessageType.image && m.mediaUrl.isNotEmpty) {
                               return Container(
                                 margin: const EdgeInsets.symmetric(vertical: 8),
-                                child: isSent
-                                    ? SentMessage(message: fallback, time: time)
-                                    : ReceivedMessage(
-                                  message: fallback,
+                                child: _ImageBubble(
+                                  url: m.mediaUrl,
                                   time: time,
-                                  senderName: 'User',
-                                  avatar: 'assets/images/buddy.jpg',
-                                  isGroup: widget.isGroup,
+                                  isSent: isSent,
+                                  onTap: () => _openNetworkImageFullScreen(m.mediaUrl),
                                 ),
                               );
                             }
 
+                            // Text bubble (and fallback for other types)
+                            final displayText = m.type == MessageType.text
+                                ? m.text
+                                : (m.text.isNotEmpty ? m.text : '[${m.type.name}]');
+
                             return Container(
                               margin: const EdgeInsets.symmetric(vertical: 8),
                               child: isSent
-                                  ? SentMessage(message: m.text, time: time)
+                                  ? SentMessage(message: displayText, time: time)
                                   : ReceivedMessage(
-                                message: m.text,
+                                message: displayText,
                                 time: time,
                                 senderName: 'User',
                                 avatar: 'assets/images/buddy.jpg',
@@ -725,6 +770,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             controller: _messageController,
             onSend: _sendTextMessage,
             onPickMedia: _pickMedia,
+            isUploadingImage: _uploadingImage,
           ),
         ],
       ),
@@ -767,7 +813,7 @@ class _PendingSentBubble extends StatelessWidget {
   }
 }
 
-// -------------------- NEW: pending model --------------------
+// -------------------- pending model --------------------
 class _PendingText {
   final String clientId;
   final String text;
@@ -778,4 +824,82 @@ class _PendingText {
     required this.text,
     required this.localTime,
   });
+}
+
+// -------------------- image bubble --------------------
+class _ImageBubble extends StatelessWidget {
+  final String url;
+  final String time;
+  final bool isSent;
+  final VoidCallback onTap;
+
+  const _ImageBubble({
+    required this.url,
+    required this.time,
+    required this.isSent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: isSent ? Alignment.centerRight : Alignment.centerLeft,
+      child: Column(
+        crossAxisAlignment:
+            isSent ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: onTap,
+            child: ClipRRect(
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: isSent
+                    ? const Radius.circular(16)
+                    : const Radius.circular(4),
+                bottomRight: isSent
+                    ? const Radius.circular(4)
+                    : const Radius.circular(16),
+              ),
+              child: Image.network(
+                url,
+                height: 200,
+                width: 200,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    height: 200,
+                    width: 200,
+                    color: XColors.secondaryBG,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: XColors.primary,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stack) => Container(
+                  height: 200,
+                  width: 200,
+                  color: XColors.secondaryBG,
+                  child: const Center(
+                    child: Icon(Icons.broken_image_outlined,
+                        color: Colors.grey, size: 40),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            time,
+            style: const TextStyle(
+                color: XColors.secondaryText, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
 }

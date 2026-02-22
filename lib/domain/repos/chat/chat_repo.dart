@@ -278,6 +278,7 @@ class ChatRepo extends RepoBase {
   Future<String> sendMessage({
     required String conversationId,
     required MessageType type,
+    List<String>? participantIds,
     String text = '',
     String mediaUrl = '',
     String thumbnailUrl = '',
@@ -292,59 +293,54 @@ class ChatRepo extends RepoBase {
 
     if (cid.isEmpty) throw RepoException('Conversation id is empty', 'invalid_conversation');
 
-    final me = await doc('${FirestorePaths.conversationParticipants(cid)}/$uid').get();
-    if (!me.exists) throw PermissionException('Not a participant');
-
-    final participantIds = await _participantIdsOnce(cid);
+    final ids = participantIds ?? await _participantIdsOnce(cid);
     final msgRef = col(FirestorePaths.conversationMessages(cid)).doc();
-
     final now = FieldValue.serverTimestamp();
     final preview = _preview(type: type, text: text);
 
-    await db.runTransaction((tx) async {
-      tx.set(msgRef, {
-        'senderUserId': uid,
-        'type': type.name,
-        'text': text,
-        'mediaUrl': mediaUrl,
-        'thumbnailUrl': thumbnailUrl,
-        'lat': lat,
-        'lng': lng,
-        'replyToMessageId': replyToMessageId,
-        'createdAt': now,
-        'clientMessageId': clientMessageId,
-        'clientCreatedAt': clientCreatedAt == null ? null : Timestamp.fromDate(clientCreatedAt),
+    final batch = db.batch();
 
-        'isDeleted': false,
-        'deliveryState': DeliveryState.sent.name,
-      });
-
-      tx.update(
-        doc('${FirestorePaths.conversations}/$cid'),
-        {
-          'lastMessageId': msgRef.id,
-          'lastMessagePreview': preview,
-          'lastMessageAt': now,
-          'updatedAt': now,
-        },
-      );
-
-      for (final pid in participantIds) {
-        // ✅ UPDATED: write updatedAt for ordering + still keep unread logic same
-        tx.set(
-          doc('${FirestorePaths.userConversations(pid)}/$cid'),
-          {
-            'conversationId': cid,
-            'lastMessageAt': now,
-            'lastMessagePreview': preview,
-            'unreadCount': pid == uid ? 0 : FieldValue.increment(1),
-            'updatedAt': now, // ✅
-          },
-          SetOptions(merge: true),
-        );
-      }
+    batch.set(msgRef, {
+      'senderUserId': uid,
+      'type': type.name,
+      'text': text,
+      'mediaUrl': mediaUrl,
+      'thumbnailUrl': thumbnailUrl,
+      'lat': lat,
+      'lng': lng,
+      'replyToMessageId': replyToMessageId,
+      'createdAt': now,
+      'clientMessageId': clientMessageId,
+      'clientCreatedAt': clientCreatedAt == null ? null : Timestamp.fromDate(clientCreatedAt),
+      'isDeleted': false,
+      'deliveryState': DeliveryState.sent.name,
     });
 
+    batch.update(
+      doc('${FirestorePaths.conversations}/$cid'),
+      {
+        'lastMessageId': msgRef.id,
+        'lastMessagePreview': preview,
+        'lastMessageAt': now,
+        'updatedAt': now,
+      },
+    );
+
+    for (final pid in ids) {
+      batch.set(
+        doc('${FirestorePaths.userConversations(pid)}/$cid'),
+        {
+          'conversationId': cid,
+          'lastMessageAt': now,
+          'lastMessagePreview': preview,
+          'unreadCount': pid == uid ? 0 : FieldValue.increment(1),
+          'updatedAt': now,
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
     return msgRef.id;
   }
 
