@@ -33,8 +33,24 @@ The Nix module `dart-3.10` is also installed, but Flutter uses its own bundled D
 
 The Nix `flutter` package (3.32.0 with Dart 3.8.0) was also installed via nix packages, but the project requires Dart ^3.8.0 (updated from ^3.10.0 to match package constraints).
 
+## Notification System
+Push notifications are handled end-to-end:
+- **Server-side (Cloud Functions)**: `functions/src/index.ts` triggers FCM + Firestore writes on events:
+  - `onBuddyRequestCreated` — notifies recipient when a buddy request is sent
+  - `onBuddyRequestUpdated` — notifies sender when their request is accepted
+  - `onSessionInviteCreated` — notifies invited user when a session invite arrives
+  - `onSessionInviteUpdated` — notifies inviter when their session invite is accepted
+  - `onNewMessage` — notifies all conversation participants on a new chat message
+- **Client-side (Flutter)**: `lib/notification_helper/my_notification.dart`
+  - Foreground messages: local notification on mobile, FCM listener on web
+  - Background messages: `myBackgroundMessageHandler` (mobile only)
+  - Tap on notification: navigates to NotificationsScreen
+- **FCM token** is stored in `users/{uid}.fcmTokens` and refreshed on every login
+- **Notification history** stored in `users/{uid}/notifications` subcollection
+- **Deploy functions**: Run `firebase deploy --only functions` from the `functions/` directory
+
 ## Notes
 - The app requires Firebase configuration to run properly
 - Firebase App Check is configured for Android in production, debug mode in debug builds
 - The app has web support but is primarily designed for mobile (Android/iOS)
-- Cloud Functions are in TypeScript under `functions/`
+- Cloud Functions are in TypeScript under `functions/` — build with `npx tsc` in that directory

@@ -1,4 +1,4 @@
-modules = ["web", "swift-5.8", "dart-3.10"]
+modules = ["web", "swift-5.8", "dart-3.10", "nodejs-20"]
 [agent]
 expertMode = true
 
