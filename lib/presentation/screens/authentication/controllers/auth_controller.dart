@@ -96,7 +96,7 @@ class AuthController extends GetxController {
 
       // 1) Upload image
       final photoUrl = await _repos.authRepo.uploadMyProfileImage(imageBytes);
-      if (photoUrl == null || photoUrl.trim().isEmpty) {
+      if (photoUrl.trim().isEmpty) {
         return AuthResult.fail('Image upload failed. Please try again.', code: 'upload_failed');
       }
 
