@@ -4,7 +4,7 @@
 FitBud is a Flutter-based fitness app that supports gym management, workout sessions, user authentication, and fitness buddy matching. It uses Firebase as the backend.
 
 ## Architecture
-- **Framework**: Flutter 3.41.2 (Dart 3.11.0)
+- **Framework**: Flutter 3.32.0 (Dart 3.8.0) via Nix
 - **Backend**: Firebase (Firestore, Auth, Storage, Functions, App Check, Messaging)
 - **State Management**: GetX (get package)
 - **Local Storage**: Hive, GetStorage, SharedPreferences
@@ -22,16 +22,14 @@ FitBud is a Flutter-based fitness app that supports gym management, workout sess
 - `web/` - Flutter web configuration
 
 ## Running the App
-- **Script**: `run_web.sh` - Uses Flutter 3.41.2 installed at `/home/runner/flutter`
+- **Script**: `run_web.sh` - Uses the Nix Flutter (3.32.0 / Dart 3.8.0)
 - **Command**: `bash run_web.sh`
 - **Port**: 5000 (web-server mode)
 - **Host**: 0.0.0.0
 
-## Flutter Installation
-Flutter 3.41.2 is installed manually at `/home/runner/flutter/` (not via Nix).
-The Nix module `dart-3.10` is also installed, but Flutter uses its own bundled Dart 3.11.0.
-
-The Nix `flutter` package (3.32.0 with Dart 3.8.0) was also installed via nix packages, but the project requires Dart ^3.8.0 (updated from ^3.10.0 to match package constraints).
+## Flutter / Dart Notes
+- Flutter 3.32.0 (Dart 3.8.0) is provided by the Nix environment.
+- `shared_preferences` is pinned to `">=2.2.0 <2.5.4"` because 2.5.4+ requires Dart ^3.9.0.
 
 ## Notification System
 Push notifications are handled end-to-end:
@@ -48,6 +46,15 @@ Push notifications are handled end-to-end:
 - **FCM token** is stored in `users/{uid}.fcmTokens` and refreshed on every login
 - **Notification history** stored in `users/{uid}/notifications` subcollection
 - **Deploy functions**: Run `firebase deploy --only functions` from the `functions/` directory
+
+## Profile Tab
+- Privacy & Security screen: `lib/presentation/screens/profile/privacy_security_screen.dart`
+- Terms & Conditions screen: `lib/presentation/screens/profile/terms_conditions_screen.dart`
+- Both screens use numbered sections with the app dark/green theme
+
+## Signup
+- Terms & Conditions checkbox is required before account creation
+- Checkbox links to both the Terms & Conditions and Privacy Policy screens in-app
 
 ## Notes
 - The app requires Firebase configuration to run properly
