@@ -283,9 +283,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                         child: PageView.builder(
                           controller: _pageController,
-                          itemCount: prods.length,
                           itemBuilder: (context, index) {
-                            final p = prods[index];
+                            final realIndex = index % prods.length;
+                            final p = prods[realIndex];
 
                             return Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16),
