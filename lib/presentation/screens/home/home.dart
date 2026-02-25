@@ -14,6 +14,7 @@ import '../../../common/widgets/home_session_invite_card.dart';
 import '../../../common/widgets/plan_card.dart';
 import '../../../common/widgets/section_heading.dart';
 import '../../../common/widgets/simple_dialog.dart';
+
 import '../authentication/controllers/location_controller.dart';
 import '../budy/all_session_invites_screen.dart';
 import '../budy/buddy_find_swipper.dart';
@@ -32,39 +33,61 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final LocationController locationController = Get.find();
-  final HomeController home = Get.find();
-  final PremiumPlanController planController = Get.find();
+  // ✅ Don't call Get.find() in field initializers (binding timing + better stability)
+  late final LocationController locationController;
+  late final HomeController home;
+  late final PremiumPlanController planController;
 
   final PageController _pageController = PageController(initialPage: 1000);
-  late Timer _timer;
+
+  Timer? _autoScrollTimer;
+  bool _userInteractingWithBanner = false;
+  Timer? _interactionDebounce;
 
   final ScrollController _scrollController = ScrollController();
-  bool _isFabVisible = true;
+
+  // ✅ smooth FAB show/hide without rebuilding whole screen
+  final ValueNotifier<bool> _fabVisible = ValueNotifier<bool>(true);
   double _lastOffset = 0;
 
   @override
   void initState() {
     super.initState();
 
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (_pageController.hasClients) {
-        _pageController.nextPage(
-          duration: const Duration(milliseconds: 800),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
+    locationController = Get.find<LocationController>();
+    home = Get.find<HomeController>();
+    planController = Get.find<PremiumPlanController>();
 
+    _startBannerAutoScroll();
+    _setupFabScrollListener();
+  }
+
+  void _startBannerAutoScroll() {
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (_userInteractingWithBanner) return;
+      if (!_pageController.hasClients) return;
+
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  void _setupFabScrollListener() {
     const double sensitivity = 8;
+
     _scrollController.addListener(() {
+      if (!_scrollController.hasClients) return;
+
       final offset = _scrollController.position.pixels;
       final diff = offset - _lastOffset;
 
       if (diff > sensitivity) {
-        if (_isFabVisible) setState(() => _isFabVisible = false);
+        if (_fabVisible.value) _fabVisible.value = false;
       } else if (diff < -sensitivity) {
-        if (!_isFabVisible) setState(() => _isFabVisible = true);
+        if (!_fabVisible.value) _fabVisible.value = true;
       }
 
       _lastOffset = offset;
@@ -73,9 +96,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _timer.cancel();
+    _autoScrollTimer?.cancel();
+    _interactionDebounce?.cancel();
+
     _pageController.dispose();
     _scrollController.dispose();
+    _fabVisible.dispose();
+
     super.dispose();
   }
 
@@ -107,17 +134,13 @@ class _HomeScreenState extends State<HomeScreen> {
             name: (me?.displayName?.trim().isNotEmpty == true)
                 ? me!.displayName!
                 : 'FitBud User',
-
             location: locationController.locationLabel,
-
             country: locationController.cityLabel,
-
             imagePath: (me?.photoUrl?.trim().isNotEmpty == true)
                 ? me!.photoUrl!
                 : 'assets/images/profile.png',
-
             onLocationTap: () async {
-                final pickedLocation = await showLocationBottomSheet(context);
+              final pickedLocation = await showLocationBottomSheet(context);
               if (pickedLocation != null) {
                 await locationController.selectAndPersist(pickedLocation);
               }
@@ -135,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
               controller: _scrollController,
               child: Column(
                 children: [
-// ---------------- Categories ----------------
+                  // ---------------- Categories ----------------
                   SizedBox(
                     height: 100,
                     child: Obx(() {
@@ -169,9 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       final cats = home.activities;
                       if (cats.isEmpty) {
-                        return const Center(
-                          child: Text('No categories found'),
-                        );
+                        return const Center(child: Text('No categories found'));
                       }
 
                       return ListView.separated(
@@ -183,11 +204,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           final a = cats[index];
 
                           return CategoryHomeIcon(
-                            iconPath: a.iconUrl.isNotEmpty ? a.iconUrl : 'assets/icons/badminton.png',
+                            iconPath: a.iconUrl.isNotEmpty
+                                ? a.iconUrl
+                                : 'assets/icons/badminton.png',
                             title: a.name,
                             onTap: () {
                               checkPremiumAndProceed(() {
-                                Get.to(() => SpecificCatagoryBuddiesMatchScreen(activity: a.name));
+                                Get.to(() => SpecificCatagoryBuddiesMatchScreen(
+                                  activity: a.name,
+                                ));
                               });
                             },
                           );
@@ -195,7 +220,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     }),
                   ),
-
 
                   // ---------------- Products/Banners ----------------
                   const SizedBox(height: 6),
@@ -210,7 +234,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (home.errProducts.value.isNotEmpty) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -241,23 +267,39 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     return SizedBox(
                       height: 180,
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: prods.length,
-                        itemBuilder: (context, index) {
-                          final p = prods[index];
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: HomeProductBanner(
-                              title: p.title,
-                              description: p.description,
-                              price: 'Rs. ${p.price.toStringAsFixed(0)}',
-                              imagePath: p.imageUrl.isNotEmpty
-                                  ? p.imageUrl
-                                  : 'assets/images/product1.png',
-                            ),
-                          );
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: (n) {
+                          if (n is ScrollStartNotification) {
+                            _userInteractingWithBanner = true;
+                            _interactionDebounce?.cancel();
+                          } else if (n is ScrollEndNotification) {
+                            _interactionDebounce?.cancel();
+                            _interactionDebounce =
+                                Timer(const Duration(milliseconds: 700), () {
+                                  _userInteractingWithBanner = false;
+                                });
+                          }
+                          return false;
                         },
+                        child: PageView.builder(
+                          controller: _pageController,
+                          itemCount: prods.length,
+                          itemBuilder: (context, index) {
+                            final p = prods[index];
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: HomeProductBanner(
+                                title: p.title,
+                                description: p.description,
+                                price: 'Rs. ${p.price.toStringAsFixed(0)}',
+                                imagePath: p.imageUrl.isNotEmpty
+                                    ? p.imageUrl
+                                    : 'assets/images/product1.png',
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     );
                   }),
@@ -268,7 +310,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   XHeading(
                     title: 'Session Invites',
                     actionText: 'View All',
-                    onActionTap: () => Get.to(() => const AllSessionInvitesScreen()),
+                    onActionTap: () =>
+                        Get.to(() => const AllSessionInvitesScreen()),
                     sidePadding: 16,
                   ),
                   const SizedBox(height: 16),
@@ -283,7 +326,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (home.errInvites.value.isNotEmpty) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -329,22 +374,30 @@ class _HomeScreenState extends State<HomeScreen> {
                           final inv = home.invites[index];
 
                           return HomeSessionInviteCard(
-                            category: (inv.sessionCategory?.isNotEmpty == true) ? inv.sessionCategory! : 'Session',
-                            invitedBy: (inv.invitedByName?.isNotEmpty == true) ? inv.invitedByName! : 'Someone',
+                            category: (inv.sessionCategory?.isNotEmpty == true)
+                                ? inv.sessionCategory!
+                                : 'Session',
+                            invitedBy: (inv.invitedByName?.isNotEmpty == true)
+                                ? inv.invitedByName!
+                                : 'Someone',
                             dateTime: inv.sessionDateTime?.toString() ?? '',
-                            location: (inv.sessionLocationText?.isNotEmpty == true) ? inv.sessionLocationText! : '',
-                            image: (inv.sessionImageUrl?.isNotEmpty == true) ? inv.sessionImageUrl! : 'assets/images/gym.jpeg',
+                            location: (inv.sessionLocationText?.isNotEmpty == true)
+                                ? inv.sessionLocationText!
+                                : '',
+                            image: (inv.sessionImageUrl?.isNotEmpty == true)
+                                ? inv.sessionImageUrl!
+                                : 'assets/images/gym.jpeg',
                             invite: inv, // <-- NEW (required)
                             nameOnTap: () {
                               final buddyUserId = inv.invitedByUserId;
                               if (buddyUserId.isEmpty) return;
+
                               Get.to(() => BuddyProfileScreen(
                                 buddyUserId: buddyUserId,
                                 scenario: BuddyScenario.existingBuddy,
                               ));
                             },
                           );
-
                         },
                       ),
                     );
@@ -411,6 +464,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 16),
                         itemBuilder: (context, index) {
                           final p = firebasePlans[index];
+
                           return PlanCard(
                             index: index,
                             title: p.name,
@@ -434,24 +488,29 @@ class _HomeScreenState extends State<HomeScreen> {
           Positioned(
             bottom: 24,
             right: 16,
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 220),
-              offset: _isFabVisible ? Offset.zero : const Offset(0, 2),
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: _isFabVisible ? 1 : 0,
-                child: FloatingActionButton(
-                  backgroundColor: XColors.primary.withValues(alpha: 0.7),
-                  elevation: 0,
-                  shape: const CircleBorder(),
-                  onPressed: () {
-                    checkPremiumAndProceed(() {
-                      Get.to(() => const BuddyFinderSwiper());
-                    });
-                  },
-                  child: const Icon(Iconsax.discover, color: Colors.white),
-                ),
-              ),
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _fabVisible,
+              builder: (_, visible, __) {
+                return AnimatedSlide(
+                  duration: const Duration(milliseconds: 220),
+                  offset: visible ? Offset.zero : const Offset(0, 2),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: visible ? 1 : 0,
+                    child: FloatingActionButton(
+                      backgroundColor: XColors.primary.withValues(alpha: 0.7),
+                      elevation: 0,
+                      shape: const CircleBorder(),
+                      onPressed: () {
+                        checkPremiumAndProceed(() {
+                          Get.to(() => const BuddyFinderSwiper());
+                        });
+                      },
+                      child: const Icon(Iconsax.discover, color: Colors.white),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],
