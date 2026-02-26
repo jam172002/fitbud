@@ -1,37 +1,38 @@
+// lib/app_binding.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:fitbud/presentation/screens/budy/controller/session_invites_controller.dart';
-import 'package:fitbud/presentation/screens/scanning/controllers/scan_controller.dart';
 import 'package:get/get.dart';
 
 import 'domain/repos/repo_provider.dart';
 import 'domain/repos/scans/scan_repo.dart';
-import 'presentation/screens/home/home_controller.dart';
-import 'presentation/screens/budy/controller/buddy_controller.dart';
+
+import 'presentation/screens/authentication/controllers/auth_controller.dart';
 import 'presentation/screens/authentication/controllers/location_controller.dart';
-import 'presentation/screens/subscription/plans_controller.dart';
+import 'presentation/screens/budy/controller/buddy_controller.dart';
+import 'presentation/screens/budy/controller/session_invites_controller.dart';
 import 'presentation/screens/gyms/controllers/gyms_user_controller.dart';
+import 'presentation/screens/home/home_controller.dart';
+import 'presentation/screens/scanning/controllers/scan_controller.dart';
+import 'presentation/screens/subscription/plans_controller.dart';
 
 class AppBinding extends Bindings {
   @override
   void dependencies() {
-    // Repos (ONE instance globally)
-    if (!Get.isRegistered<Repos>()) {
-      Get.put<Repos>(Repos(), permanent: true);
-    }
+    // Repos: ONE global instance
+    Get.put<Repos>(Repos(), permanent: true);
 
-    // Controllers that can exist globally
-    Get.put<LocationController>(LocationController(), permanent: true);
-    Get.put<PremiumPlanController>(PremiumPlanController(), permanent: true);
-
-    // Session invites controller depends on repos
-    Get.put<SessionInvitesController>(
-      SessionInvitesController(Get.find<Repos>()),
+    //  Auth controller should be global (used everywhere)
+    Get.put<AuthController>(
+      AuthController(Get.find<Repos>()),
       permanent: true,
     );
 
-    // These can be lazy-created when first needed (prevents flash)
+    //  Light/global controllers
+    Get.put<LocationController>(LocationController(), permanent: true);
+    Get.put<PremiumPlanController>(PremiumPlanController(), permanent: true);
+
+    //  Heavy or screen-based controllers -> lazy
     Get.lazyPut<HomeController>(() => HomeController(), fenix: true);
 
     Get.lazyPut<BuddyController>(
@@ -44,15 +45,21 @@ class AppBinding extends Bindings {
       fenix: true,
     );
 
+    Get.lazyPut<SessionInvitesController>(
+          () => SessionInvitesController(Get.find<Repos>()),
+      fenix: true,
+    );
+
+    //  Scan repo is okay global (used in multiple scan screens)
     Get.put<ScanRepo>(
       ScanRepo(
         FirebaseFirestore.instance,
         FirebaseAuth.instance,
         FirebaseFunctions.instance,
       ),
+      permanent: true,
     );
 
-    Get.put(ScanController(Get.find()));
-
+    Get.lazyPut<ScanController>(() => ScanController(Get.find()), fenix: true);
   }
 }

@@ -1,4 +1,5 @@
 // lib/presentation/features/budy/buddy_finder_screen.dart
+
 import 'package:fitbud/utils/colors.dart';
 import 'package:fitbud/utils/enums.dart';
 import 'package:flutter/material.dart';
@@ -28,8 +29,9 @@ class BuddyFinderScreen extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    final photo =
-    (user.photoUrl?.isNotEmpty == true) ? user.photoUrl! : 'assets/images/buddy.jpg';
+    final photo = (user.photoUrl?.isNotEmpty == true)
+        ? user.photoUrl!
+        : 'assets/images/buddy.jpg';
 
     return Scaffold(
       body: Stack(
@@ -57,6 +59,7 @@ class BuddyFinderScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Obx(() {
                   final busy = buddyC.busyUserIds.contains(user.id);
+                  final isBuddy = buddyC.buddyIds.contains(user.id);
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,68 +68,98 @@ class BuddyFinderScreen extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              user.displayName ?? 'User',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: XColors.primaryText,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w500,
-                              ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    user.displayName ?? 'User',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: XColors.primaryText,
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+
+                                // ✅ Buddy badge
+                                if (isBuddy) ...[
+                                  const SizedBox(width: 10),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.14),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(color: XColors.primary.withOpacity(0.7)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(LucideIcons.users, size: 14, color: XColors.primary),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Buddy',
+                                          style: TextStyle(
+                                            color: XColors.primary,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
+
+                          // Profile icon (always)
                           GestureDetector(
                             onTap: () {
                               final buddyUserId = user.id;
                               if (buddyUserId.isEmpty) return;
 
-                              Get.to(
-                                    () => BuddyProfileScreen(
-                                  buddyUserId: buddyUserId,
-                                  scenario: BuddyScenario.notBuddy,
-                                ),
-                              );
+                              Get.to(() => BuddyProfileScreen(
+                                buddyUserId: buddyUserId,
+                                scenario: isBuddy ? BuddyScenario.buddy : BuddyScenario.notBuddy,
+                              ));
                             },
-                            child: Icon(
-                              LucideIcons.user_round,
-                              color: XColors.primary,
-                            ),
+                            child: Icon(LucideIcons.user_round, color: XColors.primary),
                           ),
-                          const SizedBox(width: 16),
-                          GestureDetector(
-                            onTap: busy
-                                ? null
-                                : () async {
-                              try {
-                                await buddyC.inviteUser(user.id);
 
-                                Get.dialog(
-                                  SimpleDialogWidget(
+                          // ULTRA CLEAN: show invite button ONLY if not buddy
+                          if (!isBuddy) ...[
+                            const SizedBox(width: 16),
+                            GestureDetector(
+                              onTap: busy
+                                  ? null
+                                  : () async {
+                                try {
+                                  await buddyC.inviteUser(user.id);
+                                  Get.dialog(SimpleDialogWidget(
                                     message:
                                     "An invitation has been sent to the user to join as your buddy",
                                     icon: LucideIcons.circle_check,
                                     iconColor: XColors.primary,
                                     buttonText: "Ok",
                                     onOk: () => Get.back(),
-                                  ),
-                                );
-                              } catch (e) {
-                                Get.dialog(
-                                  SimpleDialogWidget(
+                                  ));
+                                } catch (e) {
+                                  Get.dialog(SimpleDialogWidget(
                                     message: e.toString(),
                                     icon: LucideIcons.circle_x,
                                     iconColor: XColors.danger,
                                     buttonText: "Ok",
                                     onOk: () => Get.back(),
-                                  ),
-                                );
-                              }
-                            },
-                            child: Icon(
-                              busy ? LucideIcons.circle_check : LucideIcons.circle_plus,
-                              color: busy ? XColors.primary : Colors.blue,
+                                  ));
+                                }
+                              },
+                              child: Icon(
+                                busy ? LucideIcons.loader_circle : LucideIcons.circle_plus,
+                                color: busy ? XColors.primary : Colors.blue,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -239,7 +272,8 @@ class BuddyFinderScreen extends StatelessWidget {
     if (dob == null) return null;
     final now = DateTime.now();
     var age = now.year - dob.year;
-    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+    if (now.month < dob.month ||
+        (now.month == dob.month && now.day < dob.day)) {
       age--;
     }
     return age;

@@ -8,55 +8,95 @@ import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/models/product/product.dart';
 import '../../../domain/models/sessions/session_invite.dart';
 import '../../../domain/repos/sessions/session_repo.dart';
+import '../authentication/controllers/auth_controller.dart';
 
 class HomeController extends GetxController {
   HomeController({
     FirebaseFirestore? db,
     FirebaseAuth? auth,
   })  : _db = db ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance,
-        _sessionRepo = SessionRepo(db ?? FirebaseFirestore.instance, auth ?? FirebaseAuth.instance);
+        _sessionRepo = SessionRepo(
+          db ?? FirebaseFirestore.instance,
+          auth ?? FirebaseAuth.instance,
+        );
 
   final FirebaseFirestore _db;
-  final FirebaseAuth _auth;
-  // Repo
   final SessionRepo _sessionRepo;
-  final Rxn<AppUser> me = Rxn<AppUser>();
-  bool get hasPremium => me.value?.hasPremiumAccess == true;
 
+  // cache auth controller (avoid repeated Get.find calls)
+  final AuthController authC = Get.find<AuthController>();
+
+  AppUser? get me => authC.me.value;
+  bool get hasPremium => me?.hasPremiumAccess == true;
+
+  // ---------------- Products ----------------
   final RxList<Product> products = <Product>[].obs;
-  final RxList<SessionInvite> invites = <SessionInvite>[].obs;
-
-  final RxBool loadingMe = true.obs;
   final RxBool loadingProducts = true.obs;
-  final RxBool loadingInvites = true.obs;
-
-  final RxString errMe = ''.obs;
   final RxString errProducts = ''.obs;
-  final RxString errInvites = ''.obs;
-
-  StreamSubscription? _meSub;
   StreamSubscription? _prodSub;
+
+  // ---------------- Invites ----------------
+  final RxList<SessionInvite> invites = <SessionInvite>[].obs;
+  final RxBool loadingInvites = true.obs;
+  final RxString errInvites = ''.obs;
   StreamSubscription? _invSub;
+
+  // ---------------- Activities (Categories) ----------------
   final RxList<Activity> activities = <Activity>[].obs;
   final RxBool loadingActivities = false.obs;
   final RxString errActivities = ''.obs;
 
+  DateTime? _activitiesLoadedAt;
+  Worker? _authWorker;
 
-  Future<void> fetchActivities() async {
+  @override
+  void onInit() {
+    super.onInit();
+
+    _listenProducts();
+
+    // Invites should follow auth state
+    _authWorker = ever<User?>(authC.authUser, (u) {
+      if (u == null) {
+        _stopInvites();
+        invites.clear();
+        loadingInvites.value = false;
+      } else {
+        _listenInvites();
+      }
+    });
+
+    // run once
+    if (authC.authUser.value != null) {
+      _listenInvites();
+    } else {
+      loadingInvites.value = false;
+    }
+
+    fetchActivities();
+  }
+
+  // ---------------- Activities ----------------
+  Future<void> fetchActivities({bool force = false}) async {
+    if (!force && activities.isNotEmpty && _activitiesLoadedAt != null) {
+      final age = DateTime.now().difference(_activitiesLoadedAt!);
+      if (age.inMinutes < 30) return;
+    }
+
     loadingActivities.value = true;
     errActivities.value = '';
     try {
-      final snap = await FirebaseFirestore.instance
+      final snap = await _db
           .collection('activities')
           .where('isActive', isEqualTo: true)
           .orderBy('order')
           .limit(50)
-          .get();
+          .get(const GetOptions(source: Source.serverAndCache));
 
       activities.assignAll(
         snap.docs.map((d) => Activity.fromDoc(d)).toList(),
       );
+      _activitiesLoadedAt = DateTime.now();
     } catch (e) {
       errActivities.value = e.toString();
     } finally {
@@ -64,40 +104,7 @@ class HomeController extends GetxController {
     }
   }
 
-  @override
-  void onInit() {
-    super.onInit();
-    _listenMe();
-    _listenProducts();
-    _listenInvites();
-    fetchActivities();
-  }
-
-  void _listenMe() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) {
-      loadingMe.value = false;
-      errMe.value = 'User not signed in';
-      return;
-    }
-
-    loadingMe.value = true;
-    errMe.value = '';
-
-    _meSub?.cancel();
-    _meSub = _db.collection('users').doc(uid).snapshots().listen((snap) {
-      if (!snap.exists) {
-        me.value = null;
-      } else {
-        me.value = AppUser.fromDoc(snap);
-      }
-      loadingMe.value = false;
-    }, onError: (e) {
-      loadingMe.value = false;
-      errMe.value = e.toString();
-    });
-  }
-
+  // ---------------- Products ----------------
   void _listenProducts() {
     loadingProducts.value = true;
     errProducts.value = '';
@@ -110,7 +117,7 @@ class HomeController extends GetxController {
         .limit(10)
         .snapshots()
         .listen((snap) {
-      products.value = snap.docs.map((d) => Product.fromDoc(d)).toList();
+      products.assignAll(snap.docs.map((d) => Product.fromDoc(d)));
       loadingProducts.value = false;
     }, onError: (e) {
       loadingProducts.value = false;
@@ -118,15 +125,14 @@ class HomeController extends GetxController {
     });
   }
 
+  // ---------------- Invites ----------------
   void _listenInvites() {
     loadingInvites.value = true;
     errInvites.value = '';
 
     _invSub?.cancel();
-
-    // Uses your existing SessionRepo logic (collectionGroup('invites'))
     _invSub = _sessionRepo.watchMySessionInvites().listen((list) {
-      invites.value = list;
+      invites.assignAll(list);
       loadingInvites.value = false;
     }, onError: (e) {
       loadingInvites.value = false;
@@ -134,11 +140,16 @@ class HomeController extends GetxController {
     });
   }
 
+  void _stopInvites() {
+    _invSub?.cancel();
+    _invSub = null;
+  }
+
   @override
   void onClose() {
-    _meSub?.cancel();
     _prodSub?.cancel();
-    _invSub?.cancel();
+    _stopInvites();
+    _authWorker?.dispose();
     super.onClose();
   }
 }

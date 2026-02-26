@@ -81,7 +81,7 @@ class BuddyMatchCard extends StatelessWidget {
                           interest,
                           style: const TextStyle(
                             color: XColors.bodyText,
-                            fontWeight: .w500,
+                            fontWeight: FontWeight.w500,
                             fontSize: 11,
                           ),
                         ),

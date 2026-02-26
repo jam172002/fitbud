@@ -5,25 +5,47 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
 
 import '../../presentation/screens/subscription/plans_controller.dart';
-import '../widgets/order_id_dialog.dart';
-import '../widgets/payment_account_number_dialog.dart';
 
-class PaymentMethodBottomSheet extends StatelessWidget {
-  final int planIndex; // Index of the plan for which payment is being made
-
+class PaymentMethodBottomSheet extends StatefulWidget {
+  final int planIndex;
   const PaymentMethodBottomSheet({super.key, required this.planIndex});
+
+  @override
+  State<PaymentMethodBottomSheet> createState() => _PaymentMethodBottomSheetState();
+}
+
+class _PaymentMethodBottomSheetState extends State<PaymentMethodBottomSheet> {
+  bool _busy = false;
 
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<PremiumPlanController>();
 
-    void _handlePending(PaymentMethod method) {
+    Future<void> _startDirectPay(PaymentMethod chosenMethod) async {
+      if (_busy) return;
+      setState(() => _busy = true);
+
       final orderId = 'FB-${DateTime.now().millisecondsSinceEpoch}';
-      controller.setPending(index: planIndex, method: method, order: orderId);
-      Get.dialog(
-        OrderInstructionDialog(paymentName: method.name, orderId: orderId),
-        barrierDismissible: false,
-      );
+
+      try {
+        // Close bottom sheet before starting flow
+        Navigator.pop(context);
+
+        await controller.startDirectPayPwa(
+          index: widget.planIndex,
+          chosenMethod: chosenMethod, // jazzcash/easypaisa
+          orderId: orderId,
+        );
+      } catch (e) {
+        // If something fails, show error and reset pending if needed
+        Get.snackbar(
+          "Payment Error",
+          e.toString(),
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
     }
 
     return Container(
@@ -32,89 +54,77 @@ class PaymentMethodBottomSheet extends StatelessWidget {
         color: XColors.primaryBG,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          /// Handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(10),
+      child: AbsorbPointer(
+        absorbing: _busy,
+        child: Opacity(
+          opacity: _busy ? 0.6 : 1,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
               ),
-            ),
-          ),
-
-          /// Title
-          Text(
-            'Select Payment Method',
-            style: TextStyle(
-              color: XColors.primaryText,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          /// JazzCash
-          _PaymentTile(
-            logo: 'assets/logos/Jazzcash.png',
-            title: 'JazzCash',
-            color: Colors.white70,
-            onTap: () {
-              Navigator.pop(context);
-              Get.dialog(
-                PaymentAccountDialog(
-                  paymentName: 'JazzCash',
-                  onConfirm: (accountNumber) {
-                    Get.back(); // close the dialog
-                    _handlePending(PaymentMethod.jazzcash);
-                  },
+              Text(
+                'Select Payment Method',
+                style: TextStyle(
+                  color: XColors.primaryText,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
-                barrierDismissible: false,
-              );
-            },
-          ),
+              ),
+              const SizedBox(height: 14),
 
-          /// Easypaisa
-          _PaymentTile(
-            logo: 'assets/logos/Easypaisa.png',
-            title: 'Easypaisa',
-            color: Colors.tealAccent,
-            onTap: () {
-              Navigator.pop(context);
-              Get.dialog(
-                PaymentAccountDialog(
-                  paymentName: 'Easypaisa',
-                  onConfirm: (accountNumber) {
-                    Get.back(); // close the dialog
-                    _handlePending(PaymentMethod.easypaisa);
-                  },
+              _PaymentTile(
+                logo: 'assets/logos/Jazzcash.png',
+                title: 'JazzCash (DirectPay)',
+                color: Colors.white70,
+                onTap: () => _startDirectPay(PaymentMethod.jazzcash),
+              ),
+
+              _PaymentTile(
+                logo: 'assets/logos/Easypaisa.png',
+                title: 'Easypaisa (DirectPay)',
+                color: Colors.tealAccent,
+                onTap: () => _startDirectPay(PaymentMethod.easypaisa),
+              ),
+
+              _PaymentTile(
+                logo: 'assets/logos/card.png',
+                title: 'Card',
+                color: Colors.blueAccent,
+                onTap: () async {
+                  Navigator.pop(context);
+                  await controller.setActive(widget.planIndex);
+                },
+              ),
+
+              if (_busy) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    SizedBox(width: 6),
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(child: Text("Starting payment...")),
+                  ],
                 ),
-                barrierDismissible: false,
-              );
-            },
+              ],
+            ],
           ),
-
-          /// Card
-          /// Card
-          _PaymentTile(
-            logo: 'assets/logos/card.png',
-            title: 'Card',
-            color: Colors.blueAccent,
-            onTap: () {
-              Navigator.pop(context);
-
-              // ✅ DIRECTLY ACTIVATE PLAN
-              controller.setActive(planIndex);
-            },
-          ),
-        ],
+        ),
       ),
     );
   }
