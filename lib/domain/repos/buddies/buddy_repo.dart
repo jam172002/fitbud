@@ -368,4 +368,33 @@ class BuddyRepo extends RepoBase {
 
     return usersSnap.docs.map(AppUser.fromDoc).toList();
   }
+
+  // BuddyRepo.dart
+
+  Stream<List<String>> watchBuddyIds({int limit = 200}) {
+    final uid = _uid();
+
+    return watchMyFriendships(limit: limit).map((items) {
+      final out = <String>[];
+
+      for (final f in items) {
+        if (f.isBlocked) continue;
+
+        if (f.userAId == uid) {
+          out.add(f.userBId);
+        } else if (f.userBId == uid) {
+          out.add(f.userAId);
+        } else {
+          // fallback safety for unexpected data
+          final ids = List<String>.from(f.userIds);
+          ids.remove(uid);
+          out.addAll(ids);
+        }
+      }
+
+      // unique + stable order
+      final set = out.toSet().toList()..sort();
+      return set;
+    });
+  }
 }
