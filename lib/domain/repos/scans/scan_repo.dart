@@ -57,29 +57,6 @@ class ScanRepo extends RepoBase {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<String> createScanClientWrite({
-    required String gymId,
-    required ScanResult result,
-    String subscriptionId = '',
-    GeoPoint? scanLocation,
-    String deviceId = '',
-    String notes = '',
-  }) async {
-    final uid = _uid();
-    final ref = col(FirestorePaths.scans).doc();
-    await ref.set({
-      'userId': uid,
-      'gymId': gymId,
-      'subscriptionId': subscriptionId,
-      'scannedAt': FieldValue.serverTimestamp(),
-      'result': result.name,
-      'deviceId': deviceId,
-      'scanLocation': scanLocation,
-      'notes': notes,
-    });
-    return ref.id;
-  }
-
   Future<Map<String, dynamic>> checkInToGym({
     required String gymId,
     required String clientCheckinId,

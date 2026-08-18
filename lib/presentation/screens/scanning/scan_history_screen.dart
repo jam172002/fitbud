@@ -1,11 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../../../utils/colors.dart';
 import '../../../common/appbar/common_appbar.dart';
+import '../../../firebase_instances.dart';
 import 'gym_scan_history_screen.dart';
 
 class ScanHistoryScreen extends StatelessWidget {
@@ -13,7 +13,7 @@ class ScanHistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = FirebaseInstances.auth.currentUser?.uid;
 
     return Scaffold(
       backgroundColor: XColors.primaryBG,
@@ -21,7 +21,7 @@ class ScanHistoryScreen extends StatelessWidget {
       body: uid == null
           ? const Center(child: Text('Not signed in'))
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
+        stream: FirebaseInstances.db
             .collection('scans')
             .where('userId', isEqualTo: uid)
             .orderBy('scannedAt', descending: true)

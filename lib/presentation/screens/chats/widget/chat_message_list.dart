@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../../../common/bottom_sheets/report_reason_sheet.dart';
+import '../../../../common/widgets/simple_dialog.dart';
 import '../../../../domain/models/chat/chat_models.dart';
+import '../../../../domain/repos/repo_provider.dart';
 import '../../../../utils/chat_utils.dart';
 import '../../../../utils/colors.dart';
 import '../../../../utils/enums.dart';
@@ -13,6 +16,42 @@ import 'full_screen_media.dart';
 import 'received_message_bubble.dart';
 import 'sent_message_bubble.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+
+/// Long-press action on a message someone else sent. Reporting your own
+/// message isn't offered - there's nothing to report to moderation about
+/// content you authored yourself.
+Future<void> _reportMessage(BuildContext context, Message m) async {
+  final submission = await showReportReasonSheet(context, title: 'Report Message');
+  if (submission == null) return;
+  try {
+    await Get.find<Repos>().moderationRepo.reportMessage(
+          conversationId: m.conversationId,
+          messageId: m.id,
+          authorUserId: m.senderUserId,
+          reason: submission.reason,
+          details: submission.details,
+        );
+    Get.dialog(
+      SimpleDialogWidget(
+        message: 'Thanks - your report has been submitted.',
+        icon: Icons.check_circle,
+        iconColor: XColors.primary,
+        buttonText: 'Ok',
+        onOk: () => Get.back(),
+      ),
+    );
+  } catch (e) {
+    Get.dialog(
+      SimpleDialogWidget(
+        message: e.toString(),
+        icon: Icons.cancel,
+        iconColor: XColors.danger,
+        buttonText: 'Ok',
+        onOk: () => Get.back(),
+      ),
+    );
+  }
+}
 
 class ChatMessageList extends StatelessWidget {
   final ChatController controller;
@@ -85,7 +124,7 @@ class ChatMessageList extends StatelessWidget {
           final time = ChatUtils.timeLabel(m.createdAt);
 
           if (m.type == MessageType.image && m.mediaUrl.isNotEmpty) {
-            return Padding(
+            final imageBubble = Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: _ImageBubble(
                 url: m.mediaUrl,
@@ -101,22 +140,36 @@ class ChatMessageList extends StatelessWidget {
                 },
               ),
             );
+            return isSent
+                ? imageBubble
+                : GestureDetector(
+                    onLongPress: () => _reportMessage(context, m),
+                    child: imageBubble,
+                  );
           }
 
           final displayText = m.type == MessageType.text
               ? m.text
               : (m.text.isNotEmpty ? m.text : '[${m.type.name}]');
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: isSent
-                ? SentMessage(message: displayText, time: time)
-                : ReceivedMessage(
-              message: displayText,
-              time: time,
-              senderName: 'User',
-              avatar: 'assets/images/buddy.jpg',
-              isGroup: controller.isGroup,
+          if (isSent) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: SentMessage(message: displayText, time: time),
+            );
+          }
+
+          return GestureDetector(
+            onLongPress: () => _reportMessage(context, m),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: ReceivedMessage(
+                message: displayText,
+                time: time,
+                senderName: 'User',
+                avatar: 'assets/images/buddy.jpg',
+                isGroup: controller.isGroup,
+              ),
             ),
           );
         },

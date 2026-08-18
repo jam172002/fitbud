@@ -206,10 +206,28 @@ class ChatController extends GetxController {
     });
   }
 
+  /// True (and shows a snackbar) if this is a direct conversation and
+  /// either side has blocked the other - a block must stop further
+  /// messaging, not just hide the other person from discovery.
+  Future<bool> _isBlockedFromSending() async {
+    if (isGroup || directOtherUserId.trim().isEmpty) return false;
+    final blocked = await repos.moderationRepo.isBlockedEitherWay(directOtherUserId);
+    if (blocked) {
+      Get.snackbar(
+        "Can't send message",
+        "You can't message this person right now.",
+        backgroundColor: XColors.danger.withValues(alpha: .2),
+        colorText: XColors.primaryText,
+      );
+    }
+    return blocked;
+  }
+
   // ---------- SEND TEXT ----------
   Future<void> sendText() async {
     final text = messageController.text.trim();
     if (text.isEmpty || sending.value) return;
+    if (await _isBlockedFromSending()) return;
 
     messageController.clear();
 
@@ -302,6 +320,7 @@ class ChatController extends GetxController {
   }
 
   Future<void> sendPickedMedia(PickedMedia picked) async {
+    if (await _isBlockedFromSending()) return;
     final clientId = DateTime.now().microsecondsSinceEpoch.toString();
     final pending = PendingMedia(clientId: clientId, picked: picked, localTime: DateTime.now());
     pendingMedias.add(pending);

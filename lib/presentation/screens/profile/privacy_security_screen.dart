@@ -59,6 +59,8 @@ class PrivacySecurityScreen extends StatelessWidget {
                 '• Enable communication between you and your fitness buddies through our in-app chat.\n\n'
                 '• Send push notifications about buddy requests, session invites, and new messages — only with your permission.\n\n'
                 '• Process subscription payments and manage your premium plan status.\n\n'
+                '• Review reports of abusive content or behavior submitted by users, and act on them under our Terms & Conditions '
+                '(including removing content or restricting an account).\n\n'
                 '• Detect and prevent fraud, abuse, and security incidents.\n\n'
                 '• Comply with legal obligations and enforce our Terms of Service.',
           ),
@@ -76,10 +78,12 @@ class PrivacySecurityScreen extends StatelessWidget {
             number: '4',
             title: 'Data Retention',
             content:
-                'We retain your personal information for as long as your account is active or as needed to provide you with our services. '
-                'You can request deletion of your account and associated data at any time through the Settings screen.\n\n'
-                'After deletion, we may retain certain information in anonymized or aggregated form for analytics and service improvement, '
-                'or where required by law.',
+                'We retain your personal information for as long as your account is active. Specific categories are handled as follows:\n\n'
+                '• Profile, chat, and social data: kept until you delete your account, at which point your profile is de-identified and personal subcollections (settings, addresses, notifications) are permanently removed.\n\n'
+                '• Gym check-in history: automatically deleted after 24 months.\n\n'
+                '• Payment/order records: retained after account deletion for financial record-keeping, separate from the rest of your profile.\n\n'
+                'You can request deletion of your account and associated data at any time through the Settings screen, '
+                'or from the web at fitbud-46f70.web.app/delete-account without needing to open the app.',
           ),
           _PrivacySection(
             number: '5',
@@ -99,7 +103,10 @@ class PrivacySecurityScreen extends StatelessWidget {
                 'You have the following rights regarding your personal information:\n\n'
                 '• Access & Correction: You can view and update your profile information at any time from the Profile section.\n\n'
                 '• Notifications: You can manage push notification preferences from your device settings or the in-app Settings screen.\n\n'
-                '• Account Deletion: You can delete your account and all associated data from the Settings screen.\n\n'
+                '• Account Deletion: You can delete your account and all associated data from Settings > Delete Account, or from '
+                'fitbud-46f70.web.app/delete-account without signing into the app. Deletion requires you to confirm your identity and cannot be undone.\n\n'
+                '• Block & Report: You can block another user to stop them from messaging or matching with you, and report content that '
+                'violates our Terms & Conditions, from that user\'s profile or from a chat message.\n\n'
                 '• Data Portability: You may request a copy of your personal data by contacting our support team.\n\n'
                 '• Opt-Out: You can opt out of non-essential communications at any time.',
           ),
@@ -303,7 +310,7 @@ class _LastUpdatedFooter extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            'Last updated: February 2026',
+            'Last updated: August 2026',
             style: TextStyle(
               color: Colors.grey.shade600,
               fontSize: 12.5,

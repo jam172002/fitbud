@@ -23,13 +23,18 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scanGym = exports.onNewMessage = exports.onSessionInviteUpdated = exports.onSessionInviteCreated = exports.onBuddyRequestUpdated = exports.onBuddyRequestCreated = void 0;
+exports.scanGym = exports.onNewMessage = exports.onSessionInviteUpdated = exports.onSessionInviteCreated = exports.onBuddyRequestUpdated = exports.onBuddyRequestCreated = exports.purgeExpiredGymScans = exports.getAccountDeletionStatus = exports.requestAccountDeletion = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const luxon_1 = require("luxon");
 admin.initializeApp();
 const db = admin.firestore();
+var accountDeletion_1 = require("./accountDeletion");
+Object.defineProperty(exports, "requestAccountDeletion", { enumerable: true, get: function () { return accountDeletion_1.requestAccountDeletion; } });
+Object.defineProperty(exports, "getAccountDeletionStatus", { enumerable: true, get: function () { return accountDeletion_1.getAccountDeletionStatus; } });
+var retention_1 = require("./retention");
+Object.defineProperty(exports, "purgeExpiredGymScans", { enumerable: true, get: function () { return retention_1.purgeExpiredGymScans; } });
 const TZ = "Asia/Karachi";
 const COOLDOWN_MINUTES = 120;
 // ---------------------------------------------------------------------------
@@ -214,7 +219,7 @@ exports.onNewMessage = (0, firestore_1.onDocumentCreated)("conversations/{conver
 // scanGym (existing — typo fix: limpit → limit)
 // ---------------------------------------------------------------------------
 exports.scanGym = (0, https_1.onCall)({ enforceAppCheck: false }, async (req) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     const uid = (_a = req.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
         throw new https_1.HttpsError("unauthenticated", "User is not signed in.");
@@ -229,8 +234,16 @@ exports.scanGym = (0, https_1.onCall)({ enforceAppCheck: false }, async (req) =>
     const gymSnap = await gymRef.get();
     if (!gymSnap.exists)
         throw new https_1.HttpsError("not-found", "Gym not found.");
-    if (((_h = gymSnap.data()) === null || _h === void 0 ? void 0 : _h.isActive) === false) {
-        return { ok: false, result: "gym_inactive" };
+    // Bug fix: the Flutter Gym model writes a `status` enum field
+    // (active/inactive/suspended) - it never writes `isActive`, so the old
+    // `gymSnap.data()?.isActive === false` check here could never trigger.
+    const gymStatus = String((_j = (_h = gymSnap.data()) === null || _h === void 0 ? void 0 : _h.status) !== null && _j !== void 0 ? _j : "active");
+    if (gymStatus === "inactive" || gymStatus === "suspended") {
+        return {
+            ok: false,
+            result: "gym_inactive",
+            message: "This gym isn't currently accepting check-ins.",
+        };
     }
     const idem = await db.collection("scans")
         .where("userId", "==", uid)
@@ -238,7 +251,12 @@ exports.scanGym = (0, https_1.onCall)({ enforceAppCheck: false }, async (req) =>
         .limit(1)
         .get();
     if (!idem.empty) {
-        return { ok: true, scanId: idem.docs[0].id, result: "already_processed" };
+        return {
+            ok: true,
+            scanId: idem.docs[0].id,
+            result: "already_processed",
+            message: "This check-in was already recorded.",
+        };
     }
     const last = await db.collection("scans")
         .where("userId", "==", uid)
@@ -250,7 +268,12 @@ exports.scanGym = (0, https_1.onCall)({ enforceAppCheck: false }, async (req) =>
     if (!last.empty) {
         const lastTs = last.docs[0].get("scannedAt");
         if (lastTs && (now.toMillis() - lastTs.toMillis()) / 60000 < COOLDOWN_MINUTES) {
-            return { ok: false, result: "cooldown" };
+            const minutesLeft = Math.ceil(COOLDOWN_MINUTES - (now.toMillis() - lastTs.toMillis()) / 60000);
+            return {
+                ok: false,
+                result: "cooldown",
+                message: `You already checked in recently. Try again in about ${minutesLeft} minute(s).`,
+            };
         }
     }
     const dt = luxon_1.DateTime.fromMillis(now.toMillis(), { zone: TZ });
@@ -275,6 +298,11 @@ exports.scanGym = (0, https_1.onCall)({ enforceAppCheck: false }, async (req) =>
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
     });
-    return { ok: true, scanId: scanRef.id, result: "accepted" };
+    return {
+        ok: true,
+        scanId: scanRef.id,
+        result: "accepted",
+        message: "Checked in!",
+    };
 });
 //# sourceMappingURL=index.js.map

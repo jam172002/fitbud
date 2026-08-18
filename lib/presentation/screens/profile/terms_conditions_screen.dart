@@ -69,15 +69,22 @@ class TermsConditionsScreen extends StatelessWidget {
           ),
           _TermsSection(
             number: '4',
-            title: 'Acceptable Use',
+            title: 'Acceptable Use & Community Rules',
             content:
-                'You agree to use FitBud only for lawful purposes and in a manner that does not infringe the rights of others. You must not:\n\n'
-                '• Post or share content that is offensive, abusive, harassing, or discriminatory.\n\n'
+                'You agree to use FitBud only for lawful purposes and in a manner that does not infringe the rights of others. '
+                'By creating an account or posting any content (including messages, photos, and profile information), you agree that you will not:\n\n'
+                '• Harass, bully, threaten, or intimidate any other user.\n\n'
+                '• Post or share content that is abusive, hateful, or discriminatory.\n\n'
+                '• Send spam, unsolicited advertising, or malware.\n\n'
+                '• Post or share sexually explicit content, or content involving minors in any inappropriate context.\n\n'
+                '• Post or share content that is illegal, or that promotes or facilitates illegal activity.\n\n'
                 '• Impersonate any person or entity, or misrepresent your affiliation.\n\n'
-                '• Use the app to distribute spam, unsolicited messages, or malware.\n\n'
                 '• Attempt to gain unauthorized access to other users\' accounts or our systems.\n\n'
                 '• Use automated tools to scrape, mine, or harvest data from the app.\n\n'
-                '• Engage in any activity that could damage, disable, or impair the FitBud service.',
+                '• Engage in any activity that could damage, disable, or impair the FitBud service, or otherwise misuse it.\n\n'
+                'If you experience or witness a violation of these rules, you can report the user or the specific content directly from '
+                'their profile or from a chat message, and you can block a user to stop them from contacting you. '
+                'We review reports and may remove content, restrict features, or suspend or terminate accounts that violate this section.',
           ),
           _TermsSection(
             number: '5',
@@ -330,7 +337,7 @@ class _LastUpdatedFooter extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            'Last updated: February 2026',
+            'Last updated: August 2026',
             style: TextStyle(
               color: Colors.grey.shade600,
               fontSize: 12.5,

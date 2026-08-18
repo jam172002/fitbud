@@ -1,10 +1,13 @@
 import * as admin from "firebase-admin";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
-import { DateTime } from "luxon";
+import {onCall, HttpsError} from "firebase-functions/v2/https";
+import {onDocumentCreated, onDocumentUpdated} from "firebase-functions/v2/firestore";
+import {DateTime} from "luxon";
 
 admin.initializeApp();
 const db = admin.firestore();
+
+export {requestAccountDeletion, getAccountDeletionStatus} from "./accountDeletion";
+export {purgeExpiredGymScans} from "./retention";
 
 const TZ = "Asia/Karachi";
 const COOLDOWN_MINUTES = 120;
@@ -48,10 +51,10 @@ async function sendFcmNotification(
 ): Promise<void> {
   await admin.messaging().send({
     token,
-    notification: { title, body },
+    notification: {title, body},
     data,
-    android: { priority: "high" },
-    apns: { payload: { aps: { sound: "default" } } },
+    android: {priority: "high"},
+    apns: {payload: {aps: {sound: "default"}}},
   });
 }
 
@@ -66,7 +69,7 @@ async function notifyUser(
   const token = await getUserFcmToken(uid);
   if (token) {
     try {
-      await sendFcmNotification(token, title, body, { ...data, type });
+      await sendFcmNotification(token, title, body, {...data, type});
     } catch (e) {
       console.error(`FCM send failed for ${uid}:`, e);
     }
@@ -102,7 +105,7 @@ export const onBuddyRequestCreated = onDocumentCreated(
       "buddy_request",
       "New Buddy Request",
       `${senderName} sent you a buddy request`,
-      { fromUserId, requestId }
+      {fromUserId, requestId}
     );
   }
 );
@@ -134,7 +137,7 @@ export const onBuddyRequestUpdated = onDocumentUpdated(
         "buddy_accepted",
         "Buddy Request Accepted",
         `${acceptorName} accepted your buddy request`,
-        { toUserId, requestId }
+        {toUserId, requestId}
       );
     }
   }
@@ -165,7 +168,7 @@ export const onSessionInviteCreated = onDocumentCreated(
       "session_invite",
       "Session Invitation",
       `${inviterName} invited you to ${category}`,
-      { sessionId, inviteId, invitedByUserId }
+      {sessionId, inviteId, invitedByUserId}
     );
   }
 );
@@ -200,7 +203,7 @@ export const onSessionInviteUpdated = onDocumentUpdated(
         "session_invite",
         "Session Invite Accepted",
         `${acceptorName} accepted your invite to ${category}`,
-        { sessionId, inviteId, invitedUserId }
+        {sessionId, inviteId, invitedUserId}
       );
     }
   }
@@ -227,15 +230,15 @@ export const onNewMessage = onDocumentCreated(
 
     let preview: string;
     switch (messageType) {
-      case "image": preview = "📷 Photo"; break;
-      case "video": preview = "🎥 Video"; break;
-      case "audio": preview = "🎵 Audio"; break;
-      case "file":  preview = "📎 File";  break;
-      default: {
-        const text: string = (data["text"] ?? "").trim();
-        preview = text.length > 80 ? `${text.substring(0, 80)}…` : text;
-        break;
-      }
+    case "image": preview = "📷 Photo"; break;
+    case "video": preview = "🎥 Video"; break;
+    case "audio": preview = "🎵 Audio"; break;
+    case "file": preview = "📎 File"; break;
+    default: {
+      const text: string = (data["text"] ?? "").trim();
+      preview = text.length > 80 ? `${text.substring(0, 80)}…` : text;
+      break;
+    }
     }
 
     const participantsSnap = await db
@@ -251,7 +254,7 @@ export const onNewMessage = onDocumentCreated(
           "message",
           senderName,
           preview || "Sent you a message",
-          { conversationId, messageId, senderUserId }
+          {conversationId, messageId, senderUserId}
         )
       );
 
@@ -262,7 +265,7 @@ export const onNewMessage = onDocumentCreated(
 // ---------------------------------------------------------------------------
 // scanGym (existing — typo fix: limpit → limit)
 // ---------------------------------------------------------------------------
-export const scanGym = onCall({ enforceAppCheck: false }, async (req) => {
+export const scanGym = onCall({enforceAppCheck: false}, async (req) => {
   const uid = req.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "User is not signed in.");
 
@@ -277,8 +280,16 @@ export const scanGym = onCall({ enforceAppCheck: false }, async (req) => {
   const gymSnap = await gymRef.get();
   if (!gymSnap.exists) throw new HttpsError("not-found", "Gym not found.");
 
-  if (gymSnap.data()?.isActive === false) {
-    return { ok: false, result: "gym_inactive" };
+  // Bug fix: the Flutter Gym model writes a `status` enum field
+  // (active/inactive/suspended) - it never writes `isActive`, so the old
+  // `gymSnap.data()?.isActive === false` check here could never trigger.
+  const gymStatus = String(gymSnap.data()?.status ?? "active");
+  if (gymStatus === "inactive" || gymStatus === "suspended") {
+    return {
+      ok: false,
+      result: "gym_inactive",
+      message: "This gym isn't currently accepting check-ins.",
+    };
   }
 
   const idem = await db.collection("scans")
@@ -288,7 +299,12 @@ export const scanGym = onCall({ enforceAppCheck: false }, async (req) => {
     .get();
 
   if (!idem.empty) {
-    return { ok: true, scanId: idem.docs[0].id, result: "already_processed" };
+    return {
+      ok: true,
+      scanId: idem.docs[0].id,
+      result: "already_processed",
+      message: "This check-in was already recorded.",
+    };
   }
 
   const last = await db.collection("scans")
@@ -303,11 +319,18 @@ export const scanGym = onCall({ enforceAppCheck: false }, async (req) => {
   if (!last.empty) {
     const lastTs = last.docs[0].get("scannedAt");
     if (lastTs && (now.toMillis() - lastTs.toMillis()) / 60000 < COOLDOWN_MINUTES) {
-      return { ok: false, result: "cooldown" };
+      const minutesLeft = Math.ceil(
+        COOLDOWN_MINUTES - (now.toMillis() - lastTs.toMillis()) / 60000
+      );
+      return {
+        ok: false,
+        result: "cooldown",
+        message: `You already checked in recently. Try again in about ${minutesLeft} minute(s).`,
+      };
     }
   }
 
-  const dt = DateTime.fromMillis(now.toMillis(), { zone: TZ });
+  const dt = DateTime.fromMillis(now.toMillis(), {zone: TZ});
   const dayKey = dt.toFormat("yyyy-LL-dd");
   const hour = dt.hour;
 
@@ -330,8 +353,13 @@ export const scanGym = onCall({ enforceAppCheck: false }, async (req) => {
       total: admin.firestore.FieldValue.increment(1),
       [`hours.${hour}`]: admin.firestore.FieldValue.increment(1),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    }, {merge: true});
   });
 
-  return { ok: true, scanId: scanRef.id, result: "accepted" };
+  return {
+    ok: true,
+    scanId: scanRef.id,
+    result: "accepted",
+    message: "Checked in!",
+  };
 });

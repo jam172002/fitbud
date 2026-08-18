@@ -2,121 +2,92 @@ import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:fitbud/utils/colors.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../../common/appbar/common_appbar.dart';
+import 'package:get/get.dart';
 
-class NotificationsScreen extends StatefulWidget {
+import '../../../common/appbar/common_appbar.dart';
+import '../../../domain/models/notifications/app_notification.dart';
+import '../../../domain/repos/repo_provider.dart';
+
+/// Reads from `users/{uid}/notifications` via NotificationRepo - the same
+/// path the buddy-request/session-invite/new-message Cloud Functions
+/// actually write to (functions/src/index.ts). This screen used to query a
+/// separate top-level `notifications` collection that nothing ever wrote to
+/// server-side, so server-generated notifications never showed up here even
+/// though the accompanying push notification still arrived. Fixed.
+class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
-  @override
-  State<NotificationsScreen> createState() => _NotificationsScreenState();
-}
+  Repos get repos => Get.find<Repos>();
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
-  // Mutable notification list
-  List<Map<String, dynamic>> notifications = [
-    {
-      'icon': LucideIcons.bell,
-      'title': 'New Session Invitation',
-      'subtitle': 'Ali Haider invited you to a gym session.',
-      'time': '2h ago',
-      'isRead': false,
-    },
-    {
-      'icon': Iconsax.message_text,
-      'title': 'Message from Sufyan',
-      'subtitle': 'Hey! Are you joining today’s workout?',
-      'time': '3h ago',
-      'isRead': true,
-    },
-    {
-      'icon': Iconsax.user_add,
-      'title': 'Buddy Request',
-      'subtitle': 'Fatima sent you a buddy request.',
-      'time': '5h ago',
-      'isRead': false,
-    },
-    {
-      'icon': Iconsax.trash,
-      'title': 'Reminder',
-      'subtitle': 'Don’t forget to log your workout today.',
-      'time': '1d ago',
-      'isRead': true,
-    },
-  ];
-  IconData _getIcon(String? type) {
+  IconData _iconFor(NotificationType type) {
     switch (type) {
-      case "session_invite":
+      case NotificationType.session_invite:
         return LucideIcons.calendar;
-      case "buddy_request":
+      case NotificationType.buddy_request:
         return Iconsax.user_add;
-      case "buddy_accept":
+      case NotificationType.buddy_accepted:
         return Iconsax.tick_circle;
-      case "message":
+      case NotificationType.group_invite:
+        return Iconsax.people;
+      case NotificationType.message:
         return Iconsax.message_text;
-      default:
-        return LucideIcons.bell;
+      case NotificationType.subscription:
+        return Iconsax.crown;
+      case NotificationType.payout:
+        return Iconsax.wallet;
     }
   }
 
-  String _timeAgo(Timestamp timestamp) {
-    final date = timestamp.toDate();
+  String _timeAgo(DateTime? date) {
+    if (date == null) return '';
     final diff = DateTime.now().difference(date);
-
-    if (diff.inMinutes < 1) return "Just now";
-    if (diff.inMinutes < 60) return "${diff.inMinutes}m ago";
-    if (diff.inHours < 24) return "${diff.inHours}h ago";
-    return "${diff.inDays}d ago";
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
-
     return Scaffold(
       backgroundColor: XColors.primaryBG,
-      appBar: XAppBar(title: 'Notifications'),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection("notifications")
-            .where("userId", isEqualTo: currentUserId)
-            .orderBy("createdAt", descending: true)
-            .snapshots(),
+      appBar: const XAppBar(title: 'Notifications'),
+      body: StreamBuilder<List<AppNotification>>(
+        stream: repos.notificationRepo.watchMyNotifications(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text("No notifications yet"),
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(
+                'Failed to load notifications.',
+                style: TextStyle(color: XColors.bodyText.withValues(alpha: .7)),
+              ),
             );
           }
 
-          final docs = snapshot.data!.docs;
+          final items = snapshot.data ?? const <AppNotification>[];
+          if (items.isEmpty) {
+            return const Center(child: Text('No notifications yet'));
+          }
 
           return ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 16),
-            itemCount: docs.length,
+            itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-
+              final n = items[index];
               return GestureDetector(
-                onTap: () async {
-                  if (data['isRead'] == false) {
-                    await docs[index].reference.update({
-                      'isRead': true,
-                    });
-                  }
+                onTap: () {
+                  if (!n.isRead) repos.notificationRepo.markRead(n.id);
                 },
                 child: _NotificationTile(
-                  icon: _getIcon(data['type']),
-                  title: data['title'] ?? '',
-                  subtitle: data['body'] ?? '',
-                  time: _timeAgo(data['createdAt']),
-                  isRead: data['isRead'] ?? true,
+                  icon: _iconFor(n.type),
+                  title: n.title,
+                  subtitle: n.body,
+                  time: _timeAgo(n.createdAt),
+                  isRead: n.isRead,
                 ),
               );
             },
@@ -135,7 +106,6 @@ class _NotificationTile extends StatelessWidget {
   final bool isRead;
 
   const _NotificationTile({
-    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,

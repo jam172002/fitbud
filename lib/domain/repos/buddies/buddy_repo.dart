@@ -235,6 +235,16 @@ class BuddyRepo extends RepoBase {
   // Friendships
   // -----------------------------
 
+  /// Ends a buddy relationship. Used by both "Remove from Buddies" (which
+  /// was previously a UI-only stub) and by blocking, which should sever any
+  /// existing friendship too.
+  Future<void> removeFriendship(String otherUserId) async {
+    final uid = _uid();
+    final ids = [uid, otherUserId]..sort();
+    final friendshipId = '${ids[0]}_${ids[1]}';
+    await doc('${FirestorePaths.friendships}/$friendshipId').delete();
+  }
+
   Stream<List<Friendship>> watchMyFriendships({int limit = 200}) {
     final uid = _uid();
     return col(FirestorePaths.friendships)

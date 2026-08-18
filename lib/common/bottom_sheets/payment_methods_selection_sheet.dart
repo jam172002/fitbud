@@ -48,6 +48,23 @@ class _PaymentMethodBottomSheetState extends State<PaymentMethodBottomSheet> {
       }
     }
 
+    Future<void> _startCard() async {
+      if (_busy) return;
+      setState(() => _busy = true);
+      try {
+        Navigator.pop(context);
+        await controller.setActive(widget.planIndex);
+      } catch (e) {
+        Get.snackbar(
+          "Payment Error",
+          e.toString(),
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
       decoration: BoxDecoration(
@@ -101,10 +118,7 @@ class _PaymentMethodBottomSheetState extends State<PaymentMethodBottomSheet> {
                 logo: 'assets/logos/card.png',
                 title: 'Card',
                 color: Colors.blueAccent,
-                onTap: () async {
-                  Navigator.pop(context);
-                  await controller.setActive(widget.planIndex);
-                },
+                onTap: _startCard,
               ),
 
               if (_busy) ...[

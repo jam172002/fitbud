@@ -1,9 +1,9 @@
 // lib/presentation/screens/gyms/widgets/gym_user_scans_section.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../firebase_instances.dart';
 import '../../../../utils/colors.dart';
 
 class GymUserScansSection extends StatelessWidget {
@@ -16,13 +16,13 @@ class GymUserScansSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = FirebaseInstances.auth.currentUser?.uid;
 
     if (uid == null) {
       return const SizedBox.shrink();
     }
 
-    final query = FirebaseFirestore.instance
+    final query = FirebaseInstances.db
         .collection('scans')
         .where('userId', isEqualTo: uid)
         .where('gymId', isEqualTo: gymId)

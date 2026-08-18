@@ -8,16 +8,17 @@ import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/models/product/product.dart';
 import '../../../domain/models/sessions/session_invite.dart';
 import '../../../domain/repos/sessions/session_repo.dart';
+import '../../../firebase_instances.dart';
 import '../authentication/controllers/auth_controller.dart';
 
 class HomeController extends GetxController {
   HomeController({
     FirebaseFirestore? db,
     FirebaseAuth? auth,
-  })  : _db = db ?? FirebaseFirestore.instance,
+  })  : _db = db ?? FirebaseInstances.db,
         _sessionRepo = SessionRepo(
-          db ?? FirebaseFirestore.instance,
-          auth ?? FirebaseAuth.instance,
+          db ?? FirebaseInstances.db,
+          auth ?? FirebaseInstances.auth,
         );
 
   final FirebaseFirestore _db;

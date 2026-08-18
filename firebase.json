@@ -1,1 +1,62 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"fitbud-46f70","appId":"1:900712761830:android:54bf4d93fcaf58e72f6e27","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"fitbud-46f70","configurations":{"android":"1:900712761830:android:54bf4d93fcaf58e72f6e27","ios":"1:900712761830:ios:cbba31fb5629ef262f6e27"}}}}},"functions":[{"codebase":"default","disallowLegacyRuntimeConfig":true,"ignore":["node_modules",".git","firebase-debug.log","firebase-debug.*.log","*.local"],"predeploy":["npm --prefix functions run lint","npm --prefix functions run build"],"source":"functions"}],"hosting":{"public":"public","rewrites":[{"source":"/payments/**","destination":"/payments/index.html"}]}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "fitbud-46f70",
+          "appId": "1:900712761830:android:54bf4d93fcaf58e72f6e27",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "fitbud-46f70",
+          "configurations": {
+            "android": "1:900712761830:android:54bf4d93fcaf58e72f6e27",
+            "ios": "1:900712761830:ios:cbba31fb5629ef262f6e27"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix functions run lint",
+        "npm --prefix functions run build"
+      ],
+      "source": "functions"
+    }
+  ],
+  "hosting": {
+    "public": "public",
+    "rewrites": [
+      { "source": "/payments/**", "destination": "/payments/index.html" },
+      { "source": "/delete-account", "destination": "/delete-account/index.html" },
+      { "source": "/privacy", "destination": "/privacy/index.html" }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "emulators": {
+    "auth": { "port": 9099 },
+    "functions": { "port": 5001 },
+    "firestore": { "port": 8080 },
+    "storage": { "port": 9199 },
+    "ui": { "enabled": true },
+    "singleProjectMode": true
+  }
+}

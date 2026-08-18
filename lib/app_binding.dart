@@ -1,11 +1,9 @@
 // lib/app_binding.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 
 import 'domain/repos/repo_provider.dart';
 import 'domain/repos/scans/scan_repo.dart';
+import 'firebase_instances.dart';
 
 import 'presentation/screens/authentication/controllers/auth_controller.dart';
 import 'presentation/screens/authentication/controllers/location_controller.dart';
@@ -53,9 +51,9 @@ class AppBinding extends Bindings {
     //  Scan repo is okay global (used in multiple scan screens)
     Get.put<ScanRepo>(
       ScanRepo(
-        FirebaseFirestore.instance,
-        FirebaseAuth.instance,
-        FirebaseFunctions.instance,
+        FirebaseInstances.db,
+        FirebaseInstances.auth,
+        FirebaseInstances.functions,
       ),
       permanent: true,
     );

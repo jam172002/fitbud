@@ -8,6 +8,8 @@ import '../../../common/widgets/two_buttons_dialog.dart';
 import '../authentication/controllers/auth_controller.dart';
 import '../authentication/screens/user_login_screen.dart';
 import 'about_app_screen.dart';
+import 'blocked_users_screen.dart';
+import 'delete_account_flow.dart';
 import 'notification_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -58,21 +60,19 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _SettingsTile(
+            icon: LucideIcons.shield_ban,
+            title: 'Blocked Users',
+            subtitle: 'Manage people you have blocked',
+            onTap: () {
+              Get.to(() => const BlockedUsersScreen());
+            },
+          ),
+          const SizedBox(height: 12),
+          _SettingsTile(
             icon: LucideIcons.trash,
             title: 'Delete Account',
             subtitle: 'Permanently delete your account',
-            onTap: () {
-              _showConfirmationDialog(
-                context: context,
-                message:
-                    'Are you sure you want to delete your account? This action cannot be undone.',
-                icon: LucideIcons.trash,
-                iconColor: Colors.redAccent,
-                onConfirm: () {
-                  // Handle account deletion
-                },
-              );
-            },
+            onTap: () => showDeleteAccountFlow(context),
           ),
           const SizedBox(height: 12),
           _SettingsTile(
