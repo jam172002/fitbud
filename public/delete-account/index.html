@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Delete Your FitBud Account</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      margin: 0; min-height: 100vh; background: #0b0b0b; color: #fff;
+      display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px;
+    }
+    .box { width: 100%; max-width: 480px; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    .sub { color: #a3a3a3; font-size: 14px; margin: 0 0 24px; line-height: 1.5; }
+    .card { border: 1px solid #222; border-radius: 16px; background: #111; padding: 24px; margin-bottom: 16px; }
+    .card h2 { font-size: 15px; margin: 0 0 10px; }
+    .card p, .card li { font-size: 13px; color: #c7c7c7; line-height: 1.6; }
+    .card ul { margin: 0; padding-left: 18px; }
+    label { display: block; font-size: 13px; margin: 12px 0 6px; color: #d4d4d4; }
+    input[type="email"], input[type="password"] {
+      width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid #2a2a2a;
+      background: #0b0b0b; color: #fff; font-size: 14px;
+    }
+    input:focus { outline: 2px solid #22c55e; outline-offset: 1px; }
+    button {
+      width: 100%; margin-top: 16px; padding: 12px; border-radius: 8px; border: none;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #fff; color: #0b0b0b; }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-secondary { background: transparent; color: #a3a3a3; border: 1px solid #2a2a2a; }
+    .error { color: #f87171; font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .success { color: #4ade80; font-size: 13px; margin-top: 10px; }
+    .checkline { display: flex; gap: 8px; align-items: flex-start; margin-top: 16px; font-size: 13px; color: #d4d4d4; }
+    .checkline input { margin-top: 3px; }
+    .hidden { display: none; }
+    .muted { color: #737373; font-size: 12px; margin-top: 18px; line-height: 1.6; }
+    a { color: #7dd3fc; }
+    .center { text-align: center; }
+    .spinner {
+      width: 20px; height: 20px; border-radius: 50%; border: 2px solid #333; border-top-color: #fff;
+      animation: spin 0.8s linear infinite; margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="box">
+  <h1>Delete your FitBud account</h1>
+  <p class="sub">Sign in to permanently delete your FitBud account and its associated data.</p>
+
+  <div class="card">
+    <h2>What this does</h2>
+    <ul>
+      <li>Removes your profile, photos, and location/address data.</li>
+      <li>Deletes your buddy requests, friendships, and group memberships.</li>
+      <li>Redacts messages you sent so shared conversations aren't broken for the other person, and removes your own conversation history.</li>
+      <li>Deletes your gym check-in history and session invites.</li>
+      <li>Signs you out everywhere and deletes your login credentials.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>What's kept, and why</h2>
+    <p>Payment/order records tied to a subscription purchase are retained for financial record-keeping rather than deleted with the rest of your account. No other personal profile data is kept once deletion completes.</p>
+  </div>
+
+  <div id="signInCard" class="card">
+    <h2>Sign in to continue</h2>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="email" placeholder="you@example.com"/>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="Your FitBud password"/>
+    <button id="signInBtn" class="btn-primary">Sign In</button>
+    <div id="signInError" class="error"></div>
+  </div>
+
+  <div id="confirmCard" class="card hidden">
+    <h2>Confirm deletion</h2>
+    <p>Signed in as <strong id="signedInEmail"></strong>.</p>
+    <label class="checkline">
+      <input id="confirmCheck" type="checkbox"/>
+      <span>I understand this permanently deletes my FitBud account and cannot be undone.</span>
+    </label>
+    <button id="deleteBtn" class="btn-danger" disabled>Permanently Delete My Account</button>
+    <button id="cancelBtn" class="btn-secondary">Cancel</button>
+    <div id="deleteError" class="error"></div>
+  </div>
+
+  <div id="progressCard" class="card hidden center">
+    <div class="spinner"></div>
+    <p style="margin-top:12px;">Deleting your account…</p>
+  </div>
+
+  <div id="doneCard" class="card hidden">
+    <h2>Account deleted</h2>
+    <p class="success">Your FitBud account has been permanently deleted.</p>
+  </div>
+
+  <p class="muted">
+    Questions about this process, or need help with an account you can't sign into?
+    Contact <a href="mailto:privacy@fitbud.app">privacy@fitbud.app</a>.
+    This page never asks for anything beyond your normal FitBud sign-in - we don't
+    collect or store your password separately, and we won't tell you whether a given
+    email address has an account before you've signed in with it.
+  </p>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+  import {
+    getAuth, signInWithEmailAndPassword, signOut,
+  } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+  import {
+    getFunctions, httpsCallable,
+  } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js";
+
+  // Same project the FitBud app uses (lib/firebase_options.dart -> web).
+  // Firebase web API keys are not secret - access is enforced by Firestore/
+  // Storage/Functions security rules, not by hiding this config.
+  const firebaseConfig = {
+    apiKey: "AIzaSyCxCizwD2HI0FNh587GILP7bnZKsmPajFY",
+    appId: "1:900712761830:web:a2b99bc0df870d992f6e27",
+    messagingSenderId: "900712761830",
+    projectId: "fitbud-46f70",
+    authDomain: "fitbud-46f70.firebaseapp.com",
+    storageBucket: "fitbud-46f70.firebasestorage.app",
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const functions = getFunctions(app);
+
+  const el = (id) => document.getElementById(id);
+  const show = (id) => el(id).classList.remove("hidden");
+  const hide = (id) => el(id).classList.add("hidden");
+
+  el("signInBtn").addEventListener("click", async () => {
+    const email = el("email").value.trim();
+    const password = el("password").value;
+    el("signInError").textContent = "";
+    if (!email || !password) {
+      el("signInError").textContent = "Enter your email and password.";
+      return;
+    }
+    el("signInBtn").disabled = true;
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      el("signedInEmail").textContent = email;
+      hide("signInCard");
+      show("confirmCard");
+    } catch (e) {
+      // Deliberately generic: never confirm/deny whether an email has an
+      // account, and don't leak raw Firebase error internals.
+      el("signInError").textContent = "Email or password is incorrect.";
+    } finally {
+      el("signInBtn").disabled = false;
+    }
+  });
+
+  el("confirmCheck").addEventListener("change", (e) => {
+    el("deleteBtn").disabled = !e.target.checked;
+  });
+
+  el("cancelBtn").addEventListener("click", async () => {
+    await signOut(auth).catch(() => {});
+    hide("confirmCard");
+    el("email").value = "";
+    el("password").value = "";
+    show("signInCard");
+  });
+
+  el("deleteBtn").addEventListener("click", async () => {
+    el("deleteError").textContent = "";
+    hide("confirmCard");
+    show("progressCard");
+    try {
+      const requestAccountDeletion = httpsCallable(functions, "requestAccountDeletion");
+      await requestAccountDeletion({ requestedVia: "web" });
+      await signOut(auth).catch(() => {});
+      hide("progressCard");
+      show("doneCard");
+    } catch (e) {
+      hide("progressCard");
+      show("confirmCard");
+      el("deleteError").textContent =
+        "Something went wrong and your account was not deleted. You can try again - " +
+        "retrying is safe and won't leave your data partially deleted. " +
+        "(" + (e && e.message ? e.message : "unknown error") + ")";
+    }
+  });
+</script>
+</body>
+</html>

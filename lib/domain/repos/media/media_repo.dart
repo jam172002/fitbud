@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../repo_exceptions.dart';
@@ -14,22 +14,26 @@ class MediaRepo {
     return u.uid;
   }
 
-  Future<String> uploadProfilePhoto(File file) async {
+  Future<String> uploadProfilePhotoBytes({
+    required Uint8List bytes,
+    String mimeType = 'image/jpeg',
+  }) async {
     final uid = _uid();
     final ref = storage.ref('users/$uid/profile.jpg');
-    await ref.putFile(file);
+    await ref.putData(bytes, SettableMetadata(contentType: mimeType));
     return ref.getDownloadURL();
   }
 
-  Future<String> uploadChatMedia({
+  Future<String> uploadChatMediaBytes({
     required String conversationId,
-    required File file,
-    required String ext, // jpg/mp4/aac/pdf...
+    required Uint8List bytes,
+    required String ext,
+    String mimeType = 'image/jpeg',
   }) async {
     final uid = _uid();
     final name = DateTime.now().millisecondsSinceEpoch.toString();
     final ref = storage.ref('chat/$conversationId/$uid/$name.$ext');
-    await ref.putFile(file);
+    await ref.putData(bytes, SettableMetadata(contentType: mimeType));
     return ref.getDownloadURL();
   }
 }

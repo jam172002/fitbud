@@ -6,14 +6,24 @@ import 'package:get/get.dart';
 
 import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/models/plans/plan.dart';
+import '../../../firebase_instances.dart';
 import '../../../utils/enums.dart';
+
+/// Thrown by every purchase path until a real payment processor is wired
+/// up server-side. See the PAYMENT_SAFETY_NOTE comments on setActive() and
+/// startDirectPayPwa() for why, and what "real" looks like.
+class PaymentsUnavailableException implements Exception {
+  @override
+  String toString() =>
+      "Subscriptions aren't available for purchase yet. Please check back soon.";
+}
 
 class PremiumPlanController extends GetxController {
   PremiumPlanController({
     FirebaseFirestore? db,
     FirebaseAuth? auth,
-  })  : _db = db ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  })  : _db = db ?? FirebaseInstances.db,
+        _auth = auth ?? FirebaseInstances.auth;
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
@@ -40,6 +50,13 @@ class PremiumPlanController extends GetxController {
 
   StreamSubscription? _plansSub;
   StreamSubscription? _meSub;
+
+  // DirectPay endpoint names/URLs kept here (rather than deleted) as the
+  // reference for whoever implements the real functions - see the
+  // PAYMENT_SAFETY_NOTE on startDirectPayPwa().
+  // Cloud Functions to implement: "directPayCreatePaymentUrl" and
+  // "directPayFinalizeFromRedirect" (region: asia-south1), redirecting to
+  // https://fitbud-46f70.web.app/payments/success and .../failed.
 
   @override
   void onInit() {
@@ -68,7 +85,10 @@ class PremiumPlanController extends GetxController {
     return false;
   }
 
-  // UI expects this signature
+  /// UI expects this signature.
+  /// UPDATED:
+  /// - JazzCash/EasyPaisa now use DirectPay PWA WebView flow.
+  /// - Card keeps your existing direct activation flow.
   Future<void> setPending({
     required int index,
     required PaymentMethod method,
@@ -77,88 +97,72 @@ class PremiumPlanController extends GetxController {
     if (isDisabled(index)) return;
     if (index < 0 || index >= plans.length) return;
 
-    selectedIndex.value = index;
-    _status.value = PlanStatus.pending;
-    _paymentMethod.value = method;
-    _orderId.value = order;
+    if (method == PaymentMethod.card) {
+      await setActive(index);
+      return;
+    }
 
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    final p = plans[index];
-
-    final ref = _db
-        .collection('users')
-        .doc(uid)
-        .collection('subscriptions')
-        .doc(order);
-
-    await ref.set({
-      'status': 'pending',
-      'provider': method.name,
-      'orderId': order,
-      'planId': p.id,
-      'planName': p.name,
-      'price': p.price,
-      'currency': p.currency,
-      'durationDays': p.durationDays,
-      'startAt': FieldValue.serverTimestamp(),
-      'endAt': null,
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    await _db.collection('users').doc(uid).set({
-      'activePlanId': p.id,
-      'activeSubscriptionId': order,
-      'isPremium': false,
-      'premiumUntil': null,
-      'premiumUpdatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await startDirectPayPwa(
+      index: index,
+      chosenMethod: method, // jazzcash/easypaisa
+      orderId: order,
+    );
   }
 
   // UI expects this
+  //
+  // PAYMENT_SAFETY_NOTE: this used to grant premium immediately with no
+  // payment processor involved at all - anyone could tap "Card" and get a
+  // free subscription. That's fixed by refusing outright rather than
+  // pretending to charge a card. It also could no longer write
+  // isPremium/activeSubscriptionId or a `subscriptions` doc directly even
+  // if it wanted to - firestore.rules now makes both server-write-only,
+  // since a payment being "active" must come from a verified payment
+  // event, never a client's say-so.
+  //
+  // To actually implement Card: process the charge through a real payment
+  // processor from a Cloud Function, and have that function (Admin SDK)
+  // write isPremium/the subscription doc after the charge is confirmed -
+  // mirroring the DirectPay finalize pattern below.
   Future<void> setActive(int index) async {
-    if (isDisabled(index)) return;
-    if (index < 0 || index >= plans.length) return;
+    throw PaymentsUnavailableException();
+  }
 
-    selectedIndex.value = index;
-    _status.value = PlanStatus.active;
-    _paymentMethod.value = PaymentMethod.card;
-    _orderId.value = 'FB-${DateTime.now().millisecondsSinceEpoch}';
+  // ---------------- DIRECTPAY FLOW ----------------
 
+  // PAYMENT_SAFETY_NOTE: `directPayCreatePaymentUrl` and
+  // `directPayFinalizeFromRedirect` are called here but do not exist in
+  // functions/src/ - this flow has never actually worked. Rather than let
+  // the client attempt a call that's guaranteed to fail (and, before this
+  // fix, silently write "pending"/premium-adjacent state to Firestore
+  // beforehand regardless), it now refuses upfront with a clear message.
+  //
+  // To actually implement this: after getting JazzCash/EasyPaisa's real
+  // DirectPay merchant credentials and API contract from the project
+  // owner, implement `directPayCreatePaymentUrl` and
+  // `directPayFinalizeFromRedirect` as Cloud Functions (Admin SDK) that
+  // hold those credentials server-side - never in the Flutter client - and
+  // write the subscription/premium fields only after the provider
+  // confirms payment.
+  Future<void> startDirectPayPwa({
+    required int index,
+    required PaymentMethod chosenMethod, // jazzcash or easypaisa
+    required String orderId,
+  }) async {
+    throw PaymentsUnavailableException();
+  }
+
+  Future<void> cancelPending({required String orderId}) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    final p = plans[index];
-    final now = DateTime.now();
-    final endAt = now.add(Duration(days: p.durationDays));
-
-    final subRef = _db
-        .collection('users')
-        .doc(uid)
-        .collection('subscriptions')
-        .doc(_orderId.value);
+    final subRef =
+    _db.collection('users').doc(uid).collection('subscriptions').doc(orderId);
 
     await subRef.set({
-      'status': 'active',
-      'provider': 'card',
-      'orderId': _orderId.value,
-      'planId': p.id,
-      'planName': p.name,
-      'price': p.price,
-      'currency': p.currency,
-      'durationDays': p.durationDays,
-      'startAt': Timestamp.fromDate(now),
-      'endAt': Timestamp.fromDate(endAt),
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    await _db.collection('users').doc(uid).set({
-      'isPremium': true,
-      'premiumUntil': Timestamp.fromDate(endAt),
-      'activePlanId': p.id,
-      'activeSubscriptionId': _orderId.value,
-      'premiumUpdatedAt': FieldValue.serverTimestamp(),
+      'status': 'cancelled',
+      'cancelledAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
@@ -172,7 +176,6 @@ class PremiumPlanController extends GetxController {
     _plansSub = _db
         .collection('plans')
         .where('isActive', isEqualTo: true)
-        //.orderBy('createdAt', descending: true)
         .snapshots()
         .listen((snap) {
       plans.value = snap.docs.map((d) => Plan.fromDoc(d)).toList();

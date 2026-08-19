@@ -235,6 +235,16 @@ class BuddyRepo extends RepoBase {
   // Friendships
   // -----------------------------
 
+  /// Ends a buddy relationship. Used by both "Remove from Buddies" (which
+  /// was previously a UI-only stub) and by blocking, which should sever any
+  /// existing friendship too.
+  Future<void> removeFriendship(String otherUserId) async {
+    final uid = _uid();
+    final ids = [uid, otherUserId]..sort();
+    final friendshipId = '${ids[0]}_${ids[1]}';
+    await doc('${FirestorePaths.friendships}/$friendshipId').delete();
+  }
+
   Stream<List<Friendship>> watchMyFriendships({int limit = 200}) {
     final uid = _uid();
     return col(FirestorePaths.friendships)
@@ -288,11 +298,17 @@ class BuddyRepo extends RepoBase {
     int limit = 30,
     String? activity,
     String? city,
+    bool premiumOnly = true,
   }) async {
     final uid = _uid();
 
     Query<Map<String, dynamic>> q =
-    db.collection(FirestorePaths.users).where('isActive', isEqualTo: true);
+    db.collection(FirestorePaths.users)
+        .where('isActive', isEqualTo: true);
+
+    if (premiumOnly) {
+      q = q.where('isPremium', isEqualTo: true);
+    }
 
     if (city != null && city.trim().isNotEmpty) {
       q = q.where('city', isEqualTo: city.trim());
@@ -361,5 +377,34 @@ class BuddyRepo extends RepoBase {
         .get();
 
     return usersSnap.docs.map(AppUser.fromDoc).toList();
+  }
+
+  // BuddyRepo.dart
+
+  Stream<List<String>> watchBuddyIds({int limit = 200}) {
+    final uid = _uid();
+
+    return watchMyFriendships(limit: limit).map((items) {
+      final out = <String>[];
+
+      for (final f in items) {
+        if (f.isBlocked) continue;
+
+        if (f.userAId == uid) {
+          out.add(f.userBId);
+        } else if (f.userBId == uid) {
+          out.add(f.userAId);
+        } else {
+          // fallback safety for unexpected data
+          final ids = List<String>.from(f.userIds);
+          ids.remove(uid);
+          out.addAll(ids);
+        }
+      }
+
+      // unique + stable order
+      final set = out.toSet().toList()..sort();
+      return set;
+    });
   }
 }

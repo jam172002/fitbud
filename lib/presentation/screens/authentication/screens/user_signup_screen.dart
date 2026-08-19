@@ -2,6 +2,8 @@
 import 'package:fitbud/presentation/screens/authentication/screens/permission_screen.dart';
 import 'package:fitbud/presentation/screens/authentication/screens/profile_setup_screens/profile_data_gathering_screen.dart';
 import 'package:fitbud/presentation/screens/authentication/screens/user_login_screen.dart';
+import 'package:fitbud/presentation/screens/profile/privacy_security_screen.dart';
+import 'package:fitbud/presentation/screens/profile/terms_conditions_screen.dart';
 
 import '../../../../common/widgets/form_field.dart';
 import '../../../../common/widgets/gender_dropdown.dart';
@@ -36,6 +38,7 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
   String? selectedGender;
   String? selectedLocation;
   DateTime? selectedDob;
+  bool _termsAccepted = false;
 
   AuthController get authC {
     // Safe fallback if you didn't register bindings in main
@@ -57,6 +60,17 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
 
   Future<void> _signup() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (!_termsAccepted) {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: "Please accept the Terms & Conditions and Privacy Policy to continue.",
+        ),
+      );
+      return;
+    }
 
     if (selectedDob == null) {
       Get.dialog(
@@ -414,39 +428,110 @@ class _UserSignupScreenState extends State<UserSignupScreen> {
                           );
                         }),
 
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 10),
 
-                        // Terms
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 4,
-                          children: [
-                            Text(
-                              'By signing up, You agree to our',
-                              style: TextStyle(
-                                color: XColors.bodyText,
-                                fontSize: 10,
+                        // Terms & Conditions checkbox
+                        GestureDetector(
+                          onTap: () {
+                            setState(() => _termsAccepted = !_termsAccepted);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _termsAccepted
+                                  ? XColors.primary.withOpacity(0.07)
+                                  : XColors.secondaryBG.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: _termsAccepted
+                                    ? XColors.primary.withOpacity(0.5)
+                                    : XColors.borderColor.withOpacity(0.4),
+                                width: 1,
                               ),
                             ),
-                            TextButton(
-                              onPressed: () {},
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                foregroundColor: XColors.primary,
-                              ).copyWith(
-                                overlayColor: MaterialStateProperty.all(Colors.transparent),
-                              ),
-                              child: Text(
-                                'Terms & Conditions',
-                                style: TextStyle(
-                                  color: XColors.primary,
-                                  fontSize: 10,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: Checkbox(
+                                    value: _termsAccepted,
+                                    onChanged: (val) {
+                                      setState(
+                                          () => _termsAccepted = val ?? false);
+                                    },
+                                    activeColor: XColors.primary,
+                                    checkColor: Colors.black,
+                                    side: BorderSide(
+                                      color: _termsAccepted
+                                          ? XColors.primary
+                                          : Colors.grey.shade600,
+                                      width: 1.5,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: XColors.bodyText.withOpacity(0.75),
+                                        height: 1.5,
+                                      ),
+                                      children: [
+                                        const TextSpan(text: 'I have read and agree to the '),
+                                        WidgetSpan(
+                                          alignment: PlaceholderAlignment.baseline,
+                                          baseline: TextBaseline.alphabetic,
+                                          child: GestureDetector(
+                                            onTap: () => Get.to(
+                                                () => const TermsConditionsScreen()),
+                                            child: const Text(
+                                              'Terms & Conditions',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: XColors.primary,
+                                                fontWeight: FontWeight.w600,
+                                                height: 1.5,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const TextSpan(text: ' and '),
+                                        WidgetSpan(
+                                          alignment: PlaceholderAlignment.baseline,
+                                          baseline: TextBaseline.alphabetic,
+                                          child: GestureDetector(
+                                            onTap: () => Get.to(
+                                                () => const PrivacySecurityScreen()),
+                                            child: const Text(
+                                              'Privacy Policy',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: XColors.primary,
+                                                fontWeight: FontWeight.w600,
+                                                height: 1.5,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const TextSpan(text: '.'),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
 
                         const SizedBox(height: 25),

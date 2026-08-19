@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/activities/activity.dart';
 import '../firestore_paths.dart';
 import '../firestore_repo_base.dart';
-import '../repo_exceptions.dart';
 
 class ActivityRepo extends RepoBase {
   final FirebaseAuth auth;

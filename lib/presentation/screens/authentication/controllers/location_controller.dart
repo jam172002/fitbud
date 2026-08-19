@@ -4,12 +4,13 @@ import 'package:get/get.dart';
 
 import '../../../../domain/models/auth/user_address.dart';
 import '../../../../domain/repos/repo_provider.dart';
+import '../../../../firebase_instances.dart';
 
 class LocationController extends GetxController {
   final Rxn<UserAddress> currentAddress = Rxn<UserAddress>();
 
   final _authRepo = Get.find<Repos>().authRepo;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseAuth _auth = FirebaseInstances.auth;
 
   StreamSubscription<User?>? _authSub;
   StreamSubscription<List<UserAddress>>? _addrSub;

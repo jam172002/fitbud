@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_messaging/firebase_messaging.dart';
-
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 
@@ -14,6 +15,9 @@ class AuthController extends GetxController {
 
   final Repos _repos;
   Repos get repos => _repos;
+
+  String? _lastPushedToken;
+  DateTime? _lastTokenPushAt;
 
   // reactive state
   final RxBool isLoading = false.obs;
@@ -83,7 +87,7 @@ class AuthController extends GetxController {
   // - Save activities, favourite, gym, about, photoUrl, isProfileComplete=true
   // ---------------------------------------------------------------------------
   Future<AuthResult> completeProfileSetup({
-    required File profileImage,
+    required Uint8List imageBytes,
     required List<String> activities,
     required String favouriteActivity,
     required bool hasGym,
@@ -94,8 +98,8 @@ class AuthController extends GetxController {
       isLoading.value = true;
 
       // 1) Upload image
-      final photoUrl = await _repos.authRepo.uploadMyProfileImage(profileImage);
-      if (photoUrl == null || photoUrl.trim().isEmpty) {
+      final photoUrl = await _repos.authRepo.uploadMyProfileImage(imageBytes);
+      if (photoUrl.trim().isEmpty) {
         return AuthResult.fail('Image upload failed. Please try again.', code: 'upload_failed');
       }
 
@@ -122,21 +126,34 @@ class AuthController extends GetxController {
     }
   }
   Future<void> updateUserDeviceToken() async {
-    final _fcm = FirebaseMessaging.instance;
-    /// Get device token
-    final userDeviceToken = await _fcm.getToken();
+    if (kIsWeb) return;
+    final u = authUser.value;
+    if (u == null) return;
 
-    /// Subscribe user to receive push notifications
-    await _fcm.subscribeToTopic("chat");
-
-    /// Update user device token
-    /// Check token result
-    if (userDeviceToken != null) {
-      await _repos.authRepo.updateMeFields({
-        "fcmTokens":userDeviceToken
-      });
-
+    // throttle: once per 12 hours
+    if (_lastTokenPushAt != null) {
+      final age = DateTime.now().difference(_lastTokenPushAt!);
+      if (age.inHours < 12) return;
     }
+
+    final fcm = FirebaseMessaging.instance;
+    final token = await fcm.getToken();
+    if (token == null || token.isEmpty) return;
+
+    // avoid repeat writes in same session
+    if (_lastPushedToken == token) return;
+
+    // subscribe once per session (optional)
+    await fcm.subscribeToTopic("chat");
+
+    await _repos.authRepo.updateMeFields({
+      // supports multiple devices
+      "fcmTokens": FieldValue.arrayUnion([token]),
+      "updatedAt": DateTime.now(),
+    });
+
+    _lastPushedToken = token;
+    _lastTokenPushAt = DateTime.now();
   }
 
   // ---------------------------------------------------------------------------
@@ -235,7 +252,7 @@ class AuthController extends GetxController {
         email: input,
         password: password,
       );
-      updateUserDeviceToken();
+
       return AuthResult.success('Login successful');
     } on FirebaseAuthException catch (e) {
       return AuthResult.fail(_mapAuthError(e), code: e.code);

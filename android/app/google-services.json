@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:900712761830:android:d5a3ff698713767c2f6e27",
+        "mobilesdk_app_id": "1:900712761830:android:84bc0499b42efe9f2f6e27",
         "android_client_info": {
-          "package_name": "com.example.fitbud"
+          "package_name": "com.fitbud.gym_panel"
         }
       },
       "oauth_client": [],
@@ -26,28 +26,9 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:900712761830:android:8c78d235bdd77fa52f6e27",
+        "mobilesdk_app_id": "1:900712761830:android:54bf4d93fcaf58e72f6e27",
         "android_client_info": {
-          "package_name": "com.example.fitbud_admin"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyC-qlTQfT7LSxai6Ak-lolUYupFRtvWmls"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:900712761830:android:7485128e5019960e2f6e27",
-        "android_client_info": {
-          "package_name": "com.fitbudapp.fitbud"
+          "package_name": "com.fitbudpk.fitbud"
         }
       },
       "oauth_client": [],

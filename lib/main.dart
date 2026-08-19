@@ -1,25 +1,13 @@
 // lib/main.dart
-import 'package:firebase_app_check/firebase_app_check.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:fitbud/presentation/screens/gyms/controllers/gyms_user_controller.dart';
-import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:hive/hive.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'data/local/checkin_outbox_item.dart';
-import 'app.dart';
-import 'domain/repos/repo_provider.dart';
-import 'firebase_options.dart';
-import 'package:fitbud/presentation/screens/authentication/controllers/auth_controller.dart';
-import 'package:fitbud/presentation/screens/authentication/controllers/location_controller.dart';
-import 'package:fitbud/presentation/screens/subscription/plans_controller.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'firebase_options.dart';
+import 'app.dart';
 import 'notification_helper/my_notification.dart';
-
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,46 +15,38 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
-
-  FirebaseMessaging.onBackgroundMessage(myBackgroundMessageHandler);
-
-  await FirebaseAppCheck.instance.activate(
-    androidProvider:
-    kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-  );
-
-  await Permission.notification.isDenied.then((value) {
-    if (value) {
-      Permission.notification.request();
-    }
-  });
-
-  await flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<
-      AndroidFlutterLocalNotificationsPlugin>()
-      ?.requestNotificationsPermission();
-
-  await MyNotification.initialize(flutterLocalNotificationsPlugin);
-
-  await Hive.initFlutter();
-  Hive.registerAdapter(CheckinOutboxItemAdapter());
-
-  final repos = Repos();
-  Get.put<Repos>(repos, permanent: true);
-  Get.put<AuthController>(
-    AuthController(Get.find<Repos>()),
-    permanent: true,
-  );
-  Get.put<GymsUserController>(
-    GymsUserController(Get.find<Repos>().gymRepo),
-    permanent: true,
-  );
-
-  Get.put<LocationController>(LocationController(), permanent: true);
-  Get.put<PremiumPlanController>(PremiumPlanController(), permanent: true);
-
-
+  await initAppCheck();
+  // Register background handler ASAP (must be top-level function in your file)
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(myBackgroundMessageHandler);
+  }
 
   runApp(const MainApp());
+}
+
+
+
+
+Future<void> initAppCheck() async {
+  if (kIsWeb) {
+    // Web: use ReCaptcha v3 (needs site key in Firebase console)
+    await FirebaseAppCheck.instance.activate(
+      webProvider: ReCaptchaV3Provider('YOUR_RECAPTCHA_SITE_KEY'),
+    );
+    return;
+  }
+
+  if (kDebugMode) {
+    //  Debug provider for local/dev builds
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: AndroidProvider.debug,
+      appleProvider: AppleProvider.debug,
+    );
+  } else {
+    //  Production provider
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: AndroidProvider.playIntegrity,
+      appleProvider: AppleProvider.deviceCheck, // or appAttest if set
+    );
+  }
 }

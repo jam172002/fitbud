@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../../firebase_instances.dart';
 import 'activities/activity_repo.dart';
 import 'auth/auth_repo.dart';
 import 'buddies/buddy_repo.dart';
@@ -12,6 +13,8 @@ import 'gyms/gym_repo.dart';
 import 'scans/scan_repo.dart';
 import 'notifications/notification_repo.dart';
 import 'media/media_repo.dart';
+import 'moderation/moderation_repo.dart';
+import 'account/account_repo.dart';
 
 class Repos {
   final FirebaseFirestore db;
@@ -28,14 +31,16 @@ class Repos {
   late final ScanRepo scanRepo = ScanRepo(db, auth, functions);
   late final NotificationRepo notificationRepo = NotificationRepo(db, auth);
   late final MediaRepo mediaRepo = MediaRepo(storage, auth);
+  late final ModerationRepo moderationRepo = ModerationRepo(db, auth);
+  late final AccountRepo accountRepo = AccountRepo(auth, functions);
 
   Repos({
     FirebaseFirestore? db,
     FirebaseAuth? auth,
     FirebaseStorage? storage,
     FirebaseFunctions? functions,
-  })  : db = db ?? FirebaseFirestore.instance,
-        auth = auth ?? FirebaseAuth.instance,
-        storage = storage ?? FirebaseStorage.instance,
-        functions = functions ?? FirebaseFunctions.instance;
+  })  : db = db ?? FirebaseInstances.db,
+        auth = auth ?? FirebaseInstances.auth,
+        storage = storage ?? FirebaseInstances.storage,
+        functions = functions ?? FirebaseInstances.functions;
 }

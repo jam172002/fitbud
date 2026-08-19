@@ -10,7 +10,7 @@ class SpecificBuddyMatchCard extends StatelessWidget {
     required this.location,
     required this.gender,
     required this.age,
-    required this.onInvite,
+    this.onInvite, // ✅ nullable
     this.isInvited = false,
     required this.onCardTap,
   });
@@ -20,28 +20,37 @@ class SpecificBuddyMatchCard extends StatelessWidget {
   final String location;
   final String gender;
   final String age;
-  final VoidCallback onInvite;
+
+  final VoidCallback? onInvite; // ✅ nullable => hide invite button
   final VoidCallback onCardTap;
   final bool isInvited;
 
+  bool get _isNetwork => avatar.trim().startsWith('http');
+
   @override
   Widget build(BuildContext context) {
+    final showInvite = onInvite != null;
+
     return GestureDetector(
       onTap: onCardTap,
       child: SizedBox(
         width: double.infinity,
         child: Row(
           children: [
-            // Avatar
-            CircleAvatar(backgroundImage: AssetImage(avatar), radius: 35),
+            // ✅ Avatar (network OR asset)
+            CircleAvatar(
+              radius: 35,
+              backgroundImage:
+              _isNetwork ? NetworkImage(avatar) : AssetImage(avatar) as ImageProvider,
+              onBackgroundImageError: (_, __) {},
+            ),
             const SizedBox(width: 8),
 
-            // Details
+            // Details (unchanged)
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Name
                   Text(
                     name,
                     style: const TextStyle(
@@ -52,7 +61,6 @@ class SpecificBuddyMatchCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
 
-                  // Gender & Age
                   Row(
                     children: [
                       Row(
@@ -94,16 +102,18 @@ class SpecificBuddyMatchCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
 
-                  // Location
                   Row(
                     children: [
-                      Icon(LucideIcons.map_pin, color: Colors.blue, size: 11),
+                      const Icon(LucideIcons.map_pin, color: Colors.blue, size: 11),
                       const SizedBox(width: 4),
-                      Text(
-                        location,
-                        style: const TextStyle(
-                          color: XColors.bodyText,
-                          fontSize: 10,
+                      Expanded(
+                        child: Text(
+                          location,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: XColors.bodyText,
+                            fontSize: 10,
+                          ),
                         ),
                       ),
                     ],
@@ -112,19 +122,19 @@ class SpecificBuddyMatchCard extends StatelessWidget {
               ),
             ),
 
-            // Invite Button
-            Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: GestureDetector(
-                onTap: onInvite,
-                child: Icon(
-                  isInvited
-                      ? LucideIcons.circle_check
-                      : LucideIcons.circle_plus,
-                  color: isInvited ? XColors.primary : XColors.secondary,
+            // ✅ Invite Button (hidden when already buddy)
+            if (showInvite)
+              Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: isInvited ? null : onInvite,
+                  child: Icon(
+                    isInvited ? LucideIcons.circle_check : LucideIcons.circle_plus,
+                    color: isInvited ? XColors.primary : XColors.secondary,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),

@@ -13,6 +13,8 @@ class FirestorePaths {
   static const transactions = 'transactions';
   static const scans = 'scans';
   static const notifications = 'notifications';
+  static const reports = 'reports';
+  static const accountDeletions = 'accountDeletions';
 
   // User subcollections
   static String userSettings(String uid) => '$users/$uid/settings/settings';
@@ -46,6 +48,8 @@ class FirestorePaths {
 
   // addresses subcollection
   static String userAddresses(String uid) => 'users/$uid/addresses';
+  // blocks subcollection: users/{uid}/blocks/{blockedUid}
+  static String userBlocks(String uid) => 'users/$uid/blocks';
   // Attendance stats
   static String gymStatsDaily(String gymId, String dayKey) => '$gyms/$gymId/statsDaily/$dayKey';
 }

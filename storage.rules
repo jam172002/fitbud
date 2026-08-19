@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// See the header note in firestore.rules - the same caveat applies here:
+// no storage.rules file existed in this repo before this change, so this
+// is a first draft written from the actual upload paths found in
+// lib/domain/repos/media/media_repo.dart and lib/domain/repos/auth/auth_repo.dart,
+// not a reconciliation with whatever is live today. Review against
+// production before deploying.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isParticipant(conversationId) {
+      return isSignedIn() && firestore.exists(
+        /databases/(default)/documents/conversations/$(conversationId)/participants/$(request.auth.uid)
+      );
+    }
+
+    // Profile photo - owner read/write, anyone signed in can view (profiles
+    // are browsable in buddy discovery).
+    match /users/{uid}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // Chat media - namespaced by uploader uid under each conversation, so a
+    // user can only ever write into their own subfolder. Read is restricted
+    // to conversation participants.
+    match /chat/{conversationId}/{uid}/{fileName} {
+      allow read: if isParticipant(conversationId);
+      allow write: if isSignedIn() && request.auth.uid == uid
+        && isParticipant(conversationId)
+        && request.resource.size < 50 * 1024 * 1024;
+    }
+
+    // Group avatar - any signed-in member can view; write is left open to
+    // any signed-in user for now (group membership isn't cheaply checkable
+    // here without duplicating the members-subcollection lookup) - tighten
+    // this once group avatar editing has real UI, since today only
+    // create_group_sheet.dart writes it, at group-creation time.
+    match /groups/{groupId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.resource.size < 10 * 1024 * 1024;
+    }
+  }
+}

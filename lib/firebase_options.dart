@@ -52,28 +52,26 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyC-qlTQfT7LSxai6Ak-lolUYupFRtvWmls',
-    appId: '1:900712761830:android:d5a3ff698713767c2f6e27',
+    appId: '1:900712761830:android:54bf4d93fcaf58e72f6e27',
     messagingSenderId: '900712761830',
     projectId: 'fitbud-46f70',
     storageBucket: 'fitbud-46f70.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyA8QqFPlaxl1V9PJ7l1r_kz8O-vR0mCiBk',
     appId: '1:900712761830:ios:cbba31fb5629ef262f6e27',
     messagingSenderId: '900712761830',
     projectId: 'fitbud-46f70',
     storageBucket: 'fitbud-46f70.firebasestorage.app',
-    iosBundleId: 'com.fitbudapp.fitbud',
+    iosBundleId: 'com.fitbudpk.fitbud',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyA8QqFPlaxl1V9PJ7l1r_kz8O-vR0mCiBk',
     appId: '1:900712761830:ios:cbba31fb5629ef262f6e27',
     messagingSenderId: '900712761830',
     projectId: 'fitbud-46f70',
     storageBucket: 'fitbud-46f70.firebasestorage.app',
-    iosBundleId: 'com.fitbudapp.fitbud',
+    iosBundleId: 'com.fitbudpk.fitbud',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
@@ -35,8 +36,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
   final AuthController authC = Get.find<AuthController>();
 
   // Page 0: Image
-  XFile? _selectedImageFile;
-  final ImagePicker _picker = ImagePicker();
+  Uint8List? _imageBytes;
 
   // Page 1: Activities (from Firebase)
   late final Stream<List<String>> _activities$;
@@ -99,7 +99,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
   bool _isPageValid(int pageIndex) {
     switch (pageIndex) {
       case 0:
-        return _selectedImageFile != null;
+        return _imageBytes != null;
 
       case 1:
         return _selectedActivities.length >= 3 && _favouriteActivity != null;
@@ -149,52 +149,52 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
   // Image picker
   // ---------------------
   Future<void> _pickImage() async {
-    final chosen = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: XColors.secondaryBG,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Icon(Icons.camera_alt, color: XColors.bodyText),
-                title: Text('Take a photo', style: TextStyle(color: XColors.bodyText)),
-                onTap: () => Navigator.of(ctx).pop('camera'),
-              ),
-              ListTile(
-                leading: Icon(Icons.photo_library, color: XColors.bodyText),
-                title: Text('Choose from gallery', style: TextStyle(color: XColors.bodyText)),
-                onTap: () => Navigator.of(ctx).pop('gallery'),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
+    final picker = ImagePicker();
+
+    String? chosen;
+    if (kIsWeb) {
+      chosen = 'gallery';
+    } else {
+      chosen = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: XColors.secondaryBG,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        builder: (ctx) {
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: Icon(Icons.camera_alt, color: XColors.bodyText),
+                  title: Text('Take a photo', style: TextStyle(color: XColors.bodyText)),
+                  onTap: () => Navigator.of(ctx).pop('camera'),
+                ),
+                ListTile(
+                  leading: Icon(Icons.photo_library, color: XColors.bodyText),
+                  title: Text('Choose from gallery', style: TextStyle(color: XColors.bodyText)),
+                  onTap: () => Navigator.of(ctx).pop('gallery'),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
+      );
+    }
 
     if (chosen == null) return;
 
     try {
-      XFile? picked;
-      if (chosen == 'camera') {
-        picked = await _picker.pickImage(
-          source: ImageSource.camera,
-          imageQuality: 80,
-          maxWidth: 1200,
-        );
-      } else {
-        picked = await _picker.pickImage(
-          source: ImageSource.gallery,
-          imageQuality: 80,
-          maxWidth: 1200,
-        );
-      }
+      final source = chosen == 'camera' ? ImageSource.camera : ImageSource.gallery;
+      final picked = await picker.pickImage(
+        source: source,
+        imageQuality: 80,
+        maxWidth: 1200,
+      );
 
       if (picked != null) {
-        setState(() => _selectedImageFile = picked);
+        final bytes = await picked.readAsBytes();
+        setState(() => _imageBytes = bytes);
       }
     } catch (_) {
       await _showSimpleMessage(
@@ -205,7 +205,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
     }
   }
 
-  void _removeSelectedImage() => setState(() => _selectedImageFile = null);
+  void _removeSelectedImage() => setState(() => _imageBytes = null);
 
   Future<String?> _openGymInputDialog() async {
     final result = await Get.dialog<String?>(
@@ -233,7 +233,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
       }
     }
 
-    if (_selectedImageFile == null) {
+    if (_imageBytes == null) {
       await _showSimpleMessage('Please select a profile image.', icon: Icons.photo);
       return;
     }
@@ -246,7 +246,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
           : (_selectedGym?.trim() ?? '');
 
       final res = await authC.completeProfileSetup(
-        profileImage: File(_selectedImageFile!.path),
+        imageBytes: _imageBytes!,
         activities: _selectedActivities.toList(),
         favouriteActivity: _favouriteActivity!,
         hasGym: _hasGym ?? false,
@@ -414,7 +414,7 @@ class _ProfileDataGatheringScreenState extends State<ProfileDataGatheringScreen>
               onPageChanged: (index) => setState(() => _currentPage = index),
               children: [
                 ProfileSetupImageSelectionPage(
-                  selectedImageFile: _selectedImageFile,
+                  imageBytes: _imageBytes,
                   onPickImage: _pickImage,
                   onRemoveImage: _removeSelectedImage,
                 ),

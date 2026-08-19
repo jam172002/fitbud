@@ -1,20 +1,19 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dotted_border/dotted_border.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:image_picker/image_picker.dart';
 
 class ProfileSetupImageSelectionPage extends StatelessWidget {
-  final XFile? selectedImageFile;
+  final Uint8List? imageBytes;
   final VoidCallback onPickImage;
   final VoidCallback onRemoveImage;
 
   const ProfileSetupImageSelectionPage({
     super.key,
-    required this.selectedImageFile,
+    required this.imageBytes,
     required this.onPickImage,
     required this.onRemoveImage,
   });
@@ -34,7 +33,7 @@ class ProfileSetupImageSelectionPage extends StatelessWidget {
               style: TextStyle(color: XColors.bodyText, fontSize: 12),
             ),
             const SizedBox(height: 16),
-            if (selectedImageFile == null)
+            if (imageBytes == null)
               GestureDetector(
                 onTap: onPickImage,
                 child: DottedBorder(
@@ -65,7 +64,7 @@ class ProfileSetupImageSelectionPage extends StatelessWidget {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         image: DecorationImage(
-                          image: FileImage(File(selectedImageFile!.path)),
+                          image: MemoryImage(imageBytes!),
                           fit: BoxFit.cover,
                         ),
                       ),

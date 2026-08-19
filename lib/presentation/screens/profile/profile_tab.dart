@@ -1,3 +1,4 @@
+import 'package:fitbud/presentation/screens/profile/privacy_security_screen.dart';
 import 'package:fitbud/presentation/screens/profile/transactions_screen.dart';
 import 'package:fitbud/presentation/screens/profile/user_profile_details_screen.dart';
 import 'package:fitbud/utils/colors.dart';
@@ -242,6 +243,17 @@ class ProfileScreen extends StatelessWidget {
                 Get.to(() => SettingsScreen());
               },
             ),
+            const SizedBox(height: 12),
+
+            _ProfileTile(
+              icon: Icons.lock_outline_rounded,
+              title: 'Privacy & Security',
+              subtitle: 'Data policy and security practices',
+              onTap: () {
+                Get.to(() => const PrivacySecurityScreen());
+              },
+            ),
+            const SizedBox(height: 12),
           ],
         ),
       ),
