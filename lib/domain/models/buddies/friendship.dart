@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 class Friendship implements FirestoreModel {
@@ -26,7 +26,7 @@ class Friendship implements FirestoreModel {
     this.blockedByUserId = '',
   });
 
-  static Friendship fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static Friendship fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     final a = FirestoreModel.readString(d['userAId']);
     final b = FirestoreModel.readString(d['userBId']);

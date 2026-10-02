@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 enum GroupInviteStatus { pending, accepted, declined, cancelled }
@@ -31,7 +31,7 @@ class GroupInvite implements FirestoreModel {
     this.respondedAt,
   });
 
-  static GroupInvite fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static GroupInvite fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return GroupInvite(
       id: doc.id,

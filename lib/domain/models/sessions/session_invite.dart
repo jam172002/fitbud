@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 enum InviteStatus { pending, accepted, declined, cancelled }
@@ -48,7 +48,7 @@ class SessionInvite implements FirestoreModel {
   /// HomeSessionInviteCard expects "image"
   String get imageUrl => (sessionImageUrl ?? '').toString();
 
-  static SessionInvite fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static SessionInvite fromDoc(Doc doc) {
     final d = doc.data() ?? <String, dynamic>{};
 
     return SessionInvite(

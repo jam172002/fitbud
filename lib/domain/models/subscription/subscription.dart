@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 enum SubscriptionStatus { active, past_due, cancelled, expired }
@@ -40,7 +40,7 @@ class Subscription implements FirestoreModel {
     this.updatedAt,
   });
 
-  static Subscription fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static Subscription fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return Subscription(
       id: doc.id,

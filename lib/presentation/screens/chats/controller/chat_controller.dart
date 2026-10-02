@@ -60,7 +60,7 @@ class ChatController extends GetxController {
   StreamSubscription<List<Message>>? _msgsSub;
   DateTime? _latestClearedAt;
 
-  String get uid => authC.authUser.value?.uid ?? '';
+  String get uid => authC.authUser.value?.id ?? '';
 
   @override
   void onInit() {

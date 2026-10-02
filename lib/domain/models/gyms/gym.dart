@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
+import '../common/geo.dart';
 import '../common/firestore_model.dart';
 
 enum GymStatus { active, inactive, suspended }
@@ -60,7 +61,7 @@ class Gym implements FirestoreModel {
     this.totalScans = 0,
   });
 
-  static Gym fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static Gym fromDoc(Doc doc) {
     final d = doc.data() ?? {};
 
     // Backward compat (just in case)
@@ -79,7 +80,7 @@ class Gym implements FirestoreModel {
       id: doc.id,
       name: FirestoreModel.readString(d['name']),
       address: FirestoreModel.readString(d['address']),
-      location: d['location'] is GeoPoint ? d['location'] as GeoPoint : null,
+      location: GeoPointX.fromAny(d['location']),
       city: FirestoreModel.readString(d['city']),
       phone: FirestoreModel.readString(d['phone']),
       logoUrl: logoUrl.isNotEmpty ? logoUrl : legacyLogo,
@@ -108,7 +109,7 @@ class Gym implements FirestoreModel {
     return {
       'name': name,
       'address': address,
-      'location': location,
+      'location': location?.toJson(),
       'city': city,
       'phone': phone,
       'logoUrl': logoUrl,

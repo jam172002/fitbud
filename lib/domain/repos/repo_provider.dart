@@ -1,46 +1,33 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import '../../firebase_instances.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../data/supabase_instances.dart';
+import 'account/account_repo.dart';
 import 'activities/activity_repo.dart';
 import 'auth/auth_repo.dart';
 import 'buddies/buddy_repo.dart';
-import 'groups/group_repo.dart';
 import 'chat/chat_repo.dart';
-import 'sessions/session_repo.dart';
+import 'groups/group_repo.dart';
 import 'gyms/gym_repo.dart';
-import 'scans/scan_repo.dart';
-import 'notifications/notification_repo.dart';
 import 'media/media_repo.dart';
 import 'moderation/moderation_repo.dart';
-import 'account/account_repo.dart';
+import 'notifications/notification_repo.dart';
+import 'scans/scan_repo.dart';
+import 'sessions/session_repo.dart';
 
 class Repos {
-  final FirebaseFirestore db;
-  final FirebaseAuth auth;
-  final FirebaseStorage storage;
-  final FirebaseFunctions functions;
-  late final ActivityRepo activityRepo = ActivityRepo(db, auth);
-  late final AuthRepo authRepo = AuthRepo(db, auth);
-  late final BuddyRepo buddyRepo = BuddyRepo(db, auth);
-  late final GroupRepo groupRepo = GroupRepo(db, auth);
-  late final ChatRepo chatRepo = ChatRepo(db, auth);
-  late final SessionRepo sessionRepo = SessionRepo(db, auth);
-  late final GymRepo gymRepo = GymRepo(db, auth);
-  late final ScanRepo scanRepo = ScanRepo(db, auth, functions);
-  late final NotificationRepo notificationRepo = NotificationRepo(db, auth);
-  late final MediaRepo mediaRepo = MediaRepo(storage, auth);
-  late final ModerationRepo moderationRepo = ModerationRepo(db, auth);
-  late final AccountRepo accountRepo = AccountRepo(auth, functions);
+  final SupabaseClient db;
+  late final ActivityRepo activityRepo = ActivityRepo(db);
+  late final AuthRepo authRepo = AuthRepo(db);
+  late final BuddyRepo buddyRepo = BuddyRepo(db);
+  late final GroupRepo groupRepo = GroupRepo(db);
+  late final ChatRepo chatRepo = ChatRepo(db);
+  late final SessionRepo sessionRepo = SessionRepo(db);
+  late final GymRepo gymRepo = GymRepo(db);
+  late final ScanRepo scanRepo = ScanRepo(db);
+  late final NotificationRepo notificationRepo = NotificationRepo(db);
+  late final MediaRepo mediaRepo = MediaRepo(db);
+  late final ModerationRepo moderationRepo = ModerationRepo(db);
+  late final AccountRepo accountRepo = AccountRepo(db);
 
-  Repos({
-    FirebaseFirestore? db,
-    FirebaseAuth? auth,
-    FirebaseStorage? storage,
-    FirebaseFunctions? functions,
-  })  : db = db ?? FirebaseInstances.db,
-        auth = auth ?? FirebaseInstances.auth,
-        storage = storage ?? FirebaseInstances.storage,
-        functions = functions ?? FirebaseInstances.functions;
+  Repos({SupabaseClient? client}) : db = client ?? SupabaseInstances.client;
 }

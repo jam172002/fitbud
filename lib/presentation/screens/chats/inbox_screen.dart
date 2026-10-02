@@ -71,7 +71,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
   // Deterministic direct id format: direct_a_b
   String _otherIdFromDirectConversationId(String convId) {
-    final uid = authC.authUser.value?.uid ?? '';
+    final uid = authC.authUser.value?.id ?? '';
     if (!convId.startsWith('direct_') || uid.isEmpty) return '';
     final parts = convId.split('_'); // direct, a, b
     if (parts.length < 3) return '';

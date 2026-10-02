@@ -1,16 +1,14 @@
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show User;
 import 'package:get/get.dart';
 
 import '../../../../domain/models/auth/user_address.dart';
 import '../../../../domain/repos/repo_provider.dart';
-import '../../../../firebase_instances.dart';
 
 class LocationController extends GetxController {
   final Rxn<UserAddress> currentAddress = Rxn<UserAddress>();
 
   final _authRepo = Get.find<Repos>().authRepo;
-  final FirebaseAuth _auth = FirebaseInstances.auth;
 
   StreamSubscription<User?>? _authSub;
   StreamSubscription<List<UserAddress>>? _addrSub;
@@ -36,8 +34,8 @@ class LocationController extends GetxController {
     super.onInit();
 
     // Wait for auth to be ready, then bind streams
-    _authSub = _auth.authStateChanges().listen((u) {
-      final uid = u?.uid;
+    _authSub = _authRepo.authState().listen((u) {
+      final uid = u?.id;
 
       // Signed out
       if (uid == null) {

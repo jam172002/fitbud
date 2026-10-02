@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 enum NotificationType {
@@ -41,7 +41,7 @@ class AppNotification implements FirestoreModel {
     this.createdAt,
   });
 
-  static AppNotification fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static AppNotification fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return AppNotification(
       id: doc.id,

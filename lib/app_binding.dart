@@ -3,7 +3,6 @@ import 'package:get/get.dart';
 
 import 'domain/repos/repo_provider.dart';
 import 'domain/repos/scans/scan_repo.dart';
-import 'firebase_instances.dart';
 
 import 'presentation/screens/authentication/controllers/auth_controller.dart';
 import 'presentation/screens/authentication/controllers/location_controller.dart';
@@ -49,14 +48,7 @@ class AppBinding extends Bindings {
     );
 
     //  Scan repo is okay global (used in multiple scan screens)
-    Get.put<ScanRepo>(
-      ScanRepo(
-        FirebaseInstances.db,
-        FirebaseInstances.auth,
-        FirebaseInstances.functions,
-      ),
-      permanent: true,
-    );
+    Get.put<ScanRepo>(Get.find<Repos>().scanRepo, permanent: true);
 
     Get.lazyPut<ScanController>(() => ScanController(Get.find()), fenix: true);
   }

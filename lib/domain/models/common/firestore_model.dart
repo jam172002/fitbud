@@ -1,23 +1,19 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-/// Base contract for Firestore-backed models.
+/// Base contract for Postgres-backed models (kept under its original name so
+/// every model keeps compiling unchanged).
 abstract class FirestoreModel {
   String get id;
 
   /// Serialize to Firestore map (no id).
   Map<String, dynamic> toMap();
 
-  /// Helper: convert DateTime? -> Timestamp?
-  static Timestamp? ts(DateTime? dt) => dt == null ? null : Timestamp.fromDate(dt);
+  /// Helper: DateTime? -> ISO-8601 string (UTC) for writes.
+  static String? ts(DateTime? dt) => dt?.toUtc().toIso8601String();
 
-  /// Helper: convert Timestamp? -> DateTime?
-  static DateTime? dt(Timestamp? ts) => ts?.toDate();
-
-  /// Helper: get Timestamp/DateTime from map in a resilient way.
+  /// Helper: read a timestamp (ISO string / DateTime) as local DateTime.
   static DateTime? readDate(dynamic v) {
     if (v == null) return null;
-    if (v is Timestamp) return v.toDate();
-    if (v is DateTime) return v;
+    if (v is DateTime) return v.toLocal();
+    if (v is String) return DateTime.tryParse(v)?.toLocal();
     return null;
   }
 

@@ -1,5 +1,4 @@
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../repo_exceptions.dart';
 
@@ -22,64 +21,67 @@ AccountDeletionStatus _statusFrom(String v) {
 
 /// Thrown by [AccountRepo.requestDeletion] when the backend requires a more
 /// recent sign-in than the current session has (mirrors the client-side
-/// reauth check, which the callable also enforces server-side).
+/// check, which the edge function also enforces server-side).
 class ReauthRequiredException extends RepoException {
   ReauthRequiredException() : super('reauth_required', 'Please sign in again to confirm this.');
 }
 
 class AccountRepo {
-  final FirebaseAuth auth;
-  final FirebaseFunctions functions;
-  AccountRepo(this.auth, this.functions);
+  final SupabaseClient db;
+  AccountRepo(this.db);
 
-  /// True if the current Firebase session is recent enough that Firebase
-  /// Auth itself won't demand reauthentication for a sensitive operation.
-  /// Used to decide, client-side, whether to prompt for the password before
-  /// even attempting deletion (a nicer flow than always calling the backend
-  /// first and reacting to a rejection).
-  bool needsReauth({Duration maxAge = const Duration(minutes: 15)}) {
-    final user = auth.currentUser;
-    if (user == null) return true;
-    final signedInAt = user.metadata.lastSignInTime;
-    if (signedInAt == null) return true;
-    return DateTime.now().difference(signedInAt) > maxAge;
+  GoTrueClient get auth => db.auth;
+
+  /// True if the current session is older than [maxAge], i.e. the user
+  /// should confirm their identity again before deleting the account. Asks
+  /// the database how old the session is (works for email, Google and Apple
+  /// sign-ins alike); if it can't tell, it errs on the side of asking.
+  Future<bool> needsReauth({Duration maxAge = const Duration(minutes: 15)}) async {
+    if (auth.currentUser == null) return true;
+    try {
+      final age = await db.rpc('session_age_minutes');
+      if (age is num) return age > maxAge.inMinutes;
+    } catch (_) {}
+    return true;
   }
 
-  /// Re-enters the user's password against their current email to refresh
-  /// the session's sign-in recency. Email/password is the only auth method
-  /// this app supports (see AuthController) so that's the only credential
-  /// type handled here.
+  /// True when the account has an email/password identity, i.e. it can be
+  /// reauthenticated with a password (otherwise sign in with Google/Apple
+  /// again).
+  bool get canReauthWithPassword {
+    final u = auth.currentUser;
+    if (u == null) return false;
+    final providers = (u.appMetadata['providers'] as List?)?.cast<String>() ?? const [];
+    return providers.contains('email');
+  }
+
+  /// Re-enters the user's password against their current email, which opens
+  /// a fresh session and so refreshes the sign-in recency.
   Future<void> reauthenticateWithPassword(String password) async {
-    final user = auth.currentUser;
-    final email = user?.email;
-    if (user == null || email == null || email.isEmpty) {
+    final email = auth.currentUser?.email;
+    if (email == null || email.isEmpty) {
       throw PermissionException('No signed-in email/password account to reauthenticate.');
     }
-    final cred = EmailAuthProvider.credential(email: email, password: password);
-    await user.reauthenticateWithCredential(cred);
+    await auth.signInWithPassword(email: email, password: password);
   }
 
   /// Calls the trusted backend deletion workflow. Safe to call more than
-  /// once - the Cloud Function is idempotent (see functions/src/accountDeletion.ts).
+  /// once - the edge function is idempotent (see supabase/functions/delete-account).
   Future<void> requestDeletion({String requestedVia = 'app'}) async {
     try {
-      final callable = functions.httpsCallable(
-        'requestAccountDeletion',
-        options: HttpsCallableOptions(timeout: const Duration(minutes: 9)),
-      );
-      await callable.call({'requestedVia': requestedVia});
-    } on FirebaseFunctionsException catch (e) {
-      if (e.code == 'failed-precondition' && e.message == 'REAUTH_REQUIRED') {
-        throw ReauthRequiredException();
-      }
+      await db.functions.invoke('delete-account', body: {'requestedVia': requestedVia});
+    } on FunctionException catch (e) {
+      final details = e.details;
+      final msg = details is Map ? '${details['message'] ?? details['error'] ?? ''}' : '$details';
+      if (e.status == 412 || msg == 'REAUTH_REQUIRED') throw ReauthRequiredException();
       rethrow;
     }
   }
 
   Future<AccountDeletionStatus> getDeletionStatus() async {
-    final callable = functions.httpsCallable('getAccountDeletionStatus');
-    final result = await callable.call<Map<String, dynamic>>();
-    final status = (result.data['status'] as String?) ?? 'none';
-    return _statusFrom(status);
+    final uid = auth.currentUser?.id;
+    if (uid == null) return AccountDeletionStatus.none;
+    final row = await db.from('account_deletions').select('status').eq('user_id', uid).maybeSingle();
+    return _statusFrom((row?['status'] as String?) ?? 'none');
   }
 }
