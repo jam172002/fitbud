@@ -412,3 +412,8 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# The push function authenticates callers with its own shared secret
+# (x-webhook-secret), not a user JWT, because it is invoked by a database trigger.
+[functions.push-notification]
+verify_jwt = false

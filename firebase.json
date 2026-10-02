@@ -19,24 +19,6 @@
       }
     }
   },
-  "functions": [
-    {
-      "codebase": "default",
-      "disallowLegacyRuntimeConfig": true,
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ],
-      "predeploy": [
-        "npm --prefix functions run lint",
-        "npm --prefix functions run build"
-      ],
-      "source": "functions"
-    }
-  ],
   "hosting": {
     "public": "public",
     "rewrites": [
@@ -44,19 +26,5 @@
       { "source": "/delete-account", "destination": "/delete-account/index.html" },
       { "source": "/privacy", "destination": "/privacy/index.html" }
     ]
-  },
-  "firestore": {
-    "rules": "firestore.rules"
-  },
-  "storage": {
-    "rules": "storage.rules"
-  },
-  "emulators": {
-    "auth": { "port": 9099 },
-    "functions": { "port": 5001 },
-    "firestore": { "port": 8080 },
-    "storage": { "port": 9199 },
-    "ui": { "enabled": true },
-    "singleProjectMode": true
   }
 }
