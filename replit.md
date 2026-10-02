@@ -1,11 +1,11 @@
 # FitBud - Flutter Fitness App
 
 ## Project Overview
-FitBud is a Flutter-based fitness app that supports gym management, workout sessions, user authentication, and fitness buddy matching. It uses Firebase as the backend. The app runs on both mobile (iOS/Android) and web.
+FitBud is a Flutter-based fitness app that supports gym management, workout sessions, user authentication, and fitness buddy matching. It uses Supabase as the backend (Firebase is used only for FCM push). The app runs on both mobile (iOS/Android) and web.
 
 ## Architecture
 - **Framework**: Flutter 3.32.0 (Dart 3.8.0) via Nix
-- **Backend**: Firebase (Firestore, Auth, Storage, Functions, App Check, Messaging)
+- **Backend**: Supabase (Auth, Postgres+RLS, Realtime, Storage, Edge Functions); FCM for push. See docs/SUPABASE_SETUP.md
 - **State Management**: GetX (get package)
 - **Local Storage**: Hive, GetStorage, SharedPreferences
 
@@ -13,12 +13,12 @@ FitBud is a Flutter-based fitness app that supports gym management, workout sess
 - `lib/main.dart` - App entry point, Firebase initialization
 - `lib/app.dart` - Root widget, onboarding/auth routing
 - `lib/app_binding.dart` - GetX dependency injection
-- `lib/firebase_options.dart` - Firebase configuration (project: fitbud-46f70)
+- `lib/data/supabase_config.dart` - Supabase URL + publishable key; `lib/firebase_options.dart` - FCM only
 - `lib/presentation/` - UI screens and controllers
 - `lib/domain/` - Domain models and repository interfaces
 - `lib/common/` - Shared widgets and utilities
 - `assets/` - Images, icons, fonts (Outfit font family)
-- `functions/` - Firebase Cloud Functions (TypeScript)
+- `supabase/` - migrations, edge functions, seed data
 - `web/` - Flutter web configuration
 
 ## Running the App
