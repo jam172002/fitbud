@@ -1,10 +1,18 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, debugPrint;
 import 'package:get/get.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+import '../../../../data/supabase_config.dart';
 import '../../../../domain/models/auth/app_user.dart';
 import '../../../../domain/repos/repo_provider.dart';
 import 'auth_result.dart';
@@ -15,19 +23,28 @@ class AuthController extends GetxController {
   final Repos _repos;
   Repos get repos => _repos;
 
+  sb.GoTrueClient get _auth => _repos.db.auth;
+
+  String? _lastPushedToken;
+  DateTime? _lastTokenPushAt;
+
   // reactive state
   final RxBool isLoading = false.obs;
-  final Rxn<User> authUser = Rxn<User>();
+  final Rxn<sb.User> authUser = Rxn<sb.User>();
   final Rxn<AppUser> me = Rxn<AppUser>();
 
-  StreamSubscription<User?>? _authSub;
+  StreamSubscription<sb.User?>? _authSub;
   StreamSubscription<AppUser?>? _meSub;
 
   @override
   void onInit() {
     super.onInit();
 
-    // Observe FirebaseAuth state
+    // Restore an already-persisted session immediately (the auth stream also
+    // replays it, but this avoids a login-screen flash on cold start).
+    authUser.value = _auth.currentUser;
+
+    // Observe Supabase auth state
     _authSub = _repos.authRepo.authState().listen((u) {
       authUser.value = u;
 
@@ -36,11 +53,11 @@ class AuthController extends GetxController {
       _meSub = null;
       me.value = null;
 
-      // If logged-in: start watching user profile doc
+      // If logged-in: start watching the user's profile row
       if (u != null) {
         _meSub = _repos.authRepo.watchMe().listen((profile) {
           me.value = profile;
-        });
+        }, onError: (e) => debugPrint('watchMe stream error: $e'));
       }
     });
   }
@@ -59,7 +76,6 @@ class AuthController extends GetxController {
     final profile = await _repos.authRepo.getMeOnce();
     me.value = profile;
   }
-
 
   // ---------------------------------------------------------------------------
   // PROFILE UPDATE (generic)
@@ -83,7 +99,7 @@ class AuthController extends GetxController {
   // - Save activities, favourite, gym, about, photoUrl, isProfileComplete=true
   // ---------------------------------------------------------------------------
   Future<AuthResult> completeProfileSetup({
-    required File profileImage,
+    required Uint8List imageBytes,
     required List<String> activities,
     required String favouriteActivity,
     required bool hasGym,
@@ -94,8 +110,8 @@ class AuthController extends GetxController {
       isLoading.value = true;
 
       // 1) Upload image
-      final photoUrl = await _repos.authRepo.uploadMyProfileImage(profileImage);
-      if (photoUrl == null || photoUrl.trim().isEmpty) {
+      final photoUrl = await _repos.authRepo.uploadMyProfileImage(imageBytes);
+      if (photoUrl.trim().isEmpty) {
         return AuthResult.fail('Image upload failed. Please try again.', code: 'upload_failed');
       }
 
@@ -108,7 +124,6 @@ class AuthController extends GetxController {
         'gymName': gymName,
         'about': about,
         'isProfileComplete': true,
-        'updatedAt': DateTime.now(),
       };
 
       await _repos.authRepo.updateMeFields(payload);
@@ -121,27 +136,39 @@ class AuthController extends GetxController {
       isLoading.value = false;
     }
   }
+
   Future<void> updateUserDeviceToken() async {
-    final _fcm = FirebaseMessaging.instance;
-    /// Get device token
-    final userDeviceToken = await _fcm.getToken();
+    if (kIsWeb) return;
+    final u = authUser.value;
+    if (u == null) return;
 
-    /// Subscribe user to receive push notifications
-    await _fcm.subscribeToTopic("chat");
-
-    /// Update user device token
-    /// Check token result
-    if (userDeviceToken != null) {
-      await _repos.authRepo.updateMeFields({
-        "fcmTokens":userDeviceToken
-      });
-
+    // throttle: once per 12 hours
+    if (_lastTokenPushAt != null) {
+      final age = DateTime.now().difference(_lastTokenPushAt!);
+      if (age.inHours < 12) return;
     }
+
+    final fcm = FirebaseMessaging.instance;
+    final token = await fcm.getToken();
+    if (token == null || token.isEmpty) return;
+
+    // avoid repeat writes in same session
+    if (_lastPushedToken == token) return;
+
+    // subscribe once per session (optional)
+    await fcm.subscribeToTopic("chat");
+
+    // supports multiple devices
+    await _repos.authRepo.addFcmToken(token);
+
+    _lastPushedToken = token;
+    _lastTokenPushAt = DateTime.now();
   }
 
   // ---------------------------------------------------------------------------
   // SIGN UP (Email/Password)
-  // Creates Auth user + creates Firestore AppUser document.
+  // Creates the auth user (a DB trigger creates the profile row), then fills
+  // in the profile fields.
   // ---------------------------------------------------------------------------
   Future<AuthResult> signUpWithEmail({
     required String name,
@@ -155,20 +182,26 @@ class AuthController extends GetxController {
     try {
       isLoading.value = true;
 
-      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      final res = await _auth.signUp(
         email: email.trim(),
         password: password,
+        data: {'display_name': name.trim()},
       );
 
-      final uid = cred.user?.uid;
+      final uid = res.user?.id;
       if (uid == null) {
         return AuthResult.fail('Signup failed. Please try again.', code: 'no_uid');
       }
 
-      // Optional: update displayName in Auth
-      await cred.user!.updateDisplayName(name.trim());
+      // With "Confirm email" enabled there is no session yet - the user has
+      // to confirm first.
+      if (res.session == null) {
+        return AuthResult.fail(
+          'Check your inbox and confirm your email, then log in.',
+          code: 'email_confirmation_required',
+        );
+      }
 
-      // Create user profile doc in Firestore
       final user = AppUser(
         id: uid,
         email: email.trim(),
@@ -177,24 +210,14 @@ class AuthController extends GetxController {
         gender: gender,
         city: location,
         dob: dob,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
         isActive: true,
-        // Optional fields for profile completion:
-        // photoUrl: '',
-        // activities: const [],
-        // favouriteActivity: '',
-        // hasGym: false,
-        // gymName: '',
-        // about: '',
-        // isProfileComplete: false,
       );
 
       await _repos.authRepo.upsertMe(user: user, merge: true);
 
       return AuthResult.success('Signup successful');
-    } on FirebaseAuthException catch (e) {
-      return AuthResult.fail(_mapAuthError(e), code: e.code);
+    } on sb.AuthException catch (e) {
+      return AuthResult.fail(_mapAuthError(e), code: e.code ?? 'auth_error');
     } catch (e) {
       return AuthResult.fail('Unexpected error: $e', code: 'unexpected');
     } finally {
@@ -231,14 +254,11 @@ class AuthController extends GetxController {
         return AuthResult.fail('Please enter a valid email.', code: 'invalid_email');
       }
 
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: input,
-        password: password,
-      );
-      updateUserDeviceToken();
+      await _auth.signInWithPassword(email: input, password: password);
+
       return AuthResult.success('Login successful');
-    } on FirebaseAuthException catch (e) {
-      return AuthResult.fail(_mapAuthError(e), code: e.code);
+    } on sb.AuthException catch (e) {
+      return AuthResult.fail(_mapAuthError(e), code: e.code ?? 'auth_error');
     } catch (e) {
       return AuthResult.fail('Unexpected error: $e', code: 'unexpected');
     } finally {
@@ -247,17 +267,127 @@ class AuthController extends GetxController {
   }
 
   // ---------------------------------------------------------------------------
-  // FORGOT PASSWORD (Firebase email reset)
+  // SOCIAL SIGN-IN (Google everywhere, Apple on iOS only)
+  // ---------------------------------------------------------------------------
+
+  /// Apple sign-in is only offered on iOS.
+  bool get appleSignInAvailable =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+  /// Signs in with Google natively and exchanges the ID token with Supabase.
+  Future<AuthResult> signInWithGoogle() async {
+    try {
+      isLoading.value = true;
+
+      final google = GoogleSignIn(
+        clientId: SupabaseConfig.googleIosClientId.isEmpty
+            ? null
+            : SupabaseConfig.googleIosClientId,
+        serverClientId: SupabaseConfig.googleWebClientId.isEmpty
+            ? null
+            : SupabaseConfig.googleWebClientId,
+      );
+      final account = await google.signIn();
+      if (account == null) {
+        return AuthResult.fail('Sign-in cancelled.', code: 'cancelled');
+      }
+      final tokens = await account.authentication;
+      final idToken = tokens.idToken;
+      if (idToken == null) {
+        return AuthResult.fail('Google did not return an ID token.', code: 'no_id_token');
+      }
+
+      await _auth.signInWithIdToken(
+        provider: sb.OAuthProvider.google,
+        idToken: idToken,
+        accessToken: tokens.accessToken,
+      );
+      return AuthResult.success('Login successful');
+    } on sb.AuthException catch (e) {
+      return AuthResult.fail(_mapAuthError(e), code: e.code ?? 'auth_error');
+    } catch (e) {
+      return AuthResult.fail('Google sign-in failed: $e', code: 'google_failed');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Signs in with Apple (iOS) and exchanges the ID token with Supabase.
+  Future<AuthResult> signInWithApple() async {
+    if (!appleSignInAvailable) {
+      return AuthResult.fail('Apple sign-in is only available on iOS.', code: 'unsupported');
+    }
+    try {
+      isLoading.value = true;
+
+      final rawNonce = _randomNonce();
+      final hashedNonce = sha256.convert(utf8.encode(rawNonce)).toString();
+
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
+        nonce: hashedNonce,
+      );
+      final idToken = credential.identityToken;
+      if (idToken == null) {
+        return AuthResult.fail('Apple did not return an identity token.', code: 'no_id_token');
+      }
+
+      await _auth.signInWithIdToken(
+        provider: sb.OAuthProvider.apple,
+        idToken: idToken,
+        nonce: rawNonce,
+      );
+
+      // Apple only sends the name on the very first authorization.
+      final full = '${credential.givenName ?? ''} ${credential.familyName ?? ''}'.trim();
+      if (full.isNotEmpty) {
+        await _repos.authRepo.updateMeFields({'displayName': full});
+      }
+      return AuthResult.success('Login successful');
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) {
+        return AuthResult.fail('Sign-in cancelled.', code: 'cancelled');
+      }
+      return AuthResult.fail('Apple sign-in failed: ${e.message}', code: 'apple_failed');
+    } on sb.AuthException catch (e) {
+      return AuthResult.fail(_mapAuthError(e), code: e.code ?? 'auth_error');
+    } catch (e) {
+      return AuthResult.fail('Apple sign-in failed: $e', code: 'apple_failed');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  String _randomNonce([int length = 32]) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._';
+    final rnd = Random.secure();
+    return List.generate(length, (_) => chars[rnd.nextInt(chars.length)]).join();
+  }
+
+  /// Re-authenticates a Google/Apple account (used by sensitive flows such as
+  /// account deletion).
+  Future<AuthResult> reauthenticateWithOAuth() async {
+    final providers =
+        (authUser.value?.appMetadata['providers'] as List?)?.cast<String>() ?? const [];
+    if (providers.contains('apple') && appleSignInAvailable) return signInWithApple();
+    return signInWithGoogle();
+  }
+
+  // ---------------------------------------------------------------------------
+  // FORGOT PASSWORD (Supabase email reset)
   // ---------------------------------------------------------------------------
   Future<AuthResult> sendPasswordResetEmail(String email) async {
     try {
       isLoading.value = true;
 
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
+      await _auth.resetPasswordForEmail(
+        email.trim(),
+        redirectTo: kIsWeb ? null : SupabaseConfig.authRedirect,
+      );
 
       return AuthResult.success('Password reset email sent');
-    } on FirebaseAuthException catch (e) {
-      return AuthResult.fail(_mapAuthError(e), code: e.code);
+    } on sb.AuthException catch (e) {
+      return AuthResult.fail(_mapAuthError(e), code: e.code ?? 'auth_error');
     } catch (e) {
       return AuthResult.fail('Unexpected error: $e', code: 'unexpected');
     } finally {
@@ -269,30 +399,34 @@ class AuthController extends GetxController {
   // LOGOUT
   // ---------------------------------------------------------------------------
   Future<void> logout() async {
+    try {
+      await GoogleSignIn().signOut();
+    } catch (_) {}
     await _repos.authRepo.signOut();
   }
 
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
-  String _mapAuthError(FirebaseAuthException e) {
+  String _mapAuthError(sb.AuthException e) {
     switch (e.code) {
-      case 'email-already-in-use':
+      case 'user_already_exists':
+      case 'email_exists':
         return 'This email is already registered.';
-      case 'invalid-email':
+      case 'validation_failed':
+      case 'email_address_invalid':
         return 'Please enter a valid email address.';
-      case 'weak-password':
+      case 'weak_password':
         return 'Password is too weak.';
-      case 'user-not-found':
-        return 'No account found with this email.';
-      case 'wrong-password':
-        return 'Incorrect password.';
-      case 'invalid-credential':
-        return 'Invalid credentials. Please try again.';
-      case 'too-many-requests':
+      case 'invalid_credentials':
+        return 'Incorrect email or password.';
+      case 'email_not_confirmed':
+        return 'Please confirm your email first, then log in.';
+      case 'over_request_rate_limit':
+      case 'over_email_send_rate_limit':
         return 'Too many attempts. Please wait and try again.';
       default:
-        return e.message ?? 'Authentication error occurred.';
+        return e.message.isNotEmpty ? e.message : 'Authentication error occurred.';
     }
   }
 }

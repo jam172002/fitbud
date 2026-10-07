@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 class DeviceToken implements FirestoreModel {
@@ -18,7 +18,7 @@ class DeviceToken implements FirestoreModel {
     this.lastSeenAt,
   });
 
-  static DeviceToken fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static DeviceToken fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return DeviceToken(
       id: doc.id,

@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 class Group implements FirestoreModel {
@@ -24,7 +24,7 @@ class Group implements FirestoreModel {
     this.memberCount = 0,
   });
 
-  static Group fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static Group fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return Group(
       id: doc.id,

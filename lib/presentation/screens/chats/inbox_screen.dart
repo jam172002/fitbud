@@ -3,7 +3,6 @@ import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
-
 import '../../../common/appbar/common_appbar.dart';
 import '../../../common/bottom_sheets/create_group_sheet.dart';
 import '../../../common/bottom_sheets/show_buddies_sheet.dart';
@@ -72,7 +71,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
   // Deterministic direct id format: direct_a_b
   String _otherIdFromDirectConversationId(String convId) {
-    final uid = authC.authUser.value?.uid ?? '';
+    final uid = authC.authUser.value?.id ?? '';
     if (!convId.startsWith('direct_') || uid.isEmpty) return '';
     final parts = convId.split('_'); // direct, a, b
     if (parts.length < 3) return '';
@@ -145,7 +144,7 @@ class _InboxScreenState extends State<InboxScreen> {
               const SizedBox(height: 16),
               Expanded(
                 child: StreamBuilder<List<(UserConversationIndex idx, Conversation? conv)>>(
-                  stream: repos.chatRepo.watchMyInbox(limit: 100),
+                  stream: repos.chatRepo.watchMyInbox(limit: 30),
                   builder: (context, snap) {
                     if (snap.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());

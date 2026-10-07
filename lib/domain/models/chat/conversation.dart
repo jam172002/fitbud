@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 enum ConversationType { direct, group }
@@ -36,7 +36,7 @@ class Conversation implements FirestoreModel {
     this.lastMessageAt,
   });
 
-  static Conversation fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static Conversation fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return Conversation(
       id: doc.id,

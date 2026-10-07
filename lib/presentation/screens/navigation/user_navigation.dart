@@ -1,8 +1,12 @@
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:get/get.dart';
 import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
 
+import '../../../common/widgets/simple_dialog.dart';
+import '../authentication/controllers/auth_controller.dart';
+import '../authentication/screens/profile_setup_screens/profile_data_gathering_screen.dart';
 import '../chats/inbox_screen.dart';
 import '../gyms/gyms_screen.dart';
 import '../home/home.dart';
@@ -26,6 +30,35 @@ class _UserNavigationState extends State<UserNavigation> {
     ProfileScreen(),
   ];
   // ----------------------------------------------------- //
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _promptProfileIfNeeded());
+  }
+
+  Future<void> _promptProfileIfNeeded() async {
+    final authC = Get.find<AuthController>();
+    try {
+      await authC.loadMe();
+    } catch (_) {
+      return;
+    }
+    final me = authC.me.value;
+    // No profile row yet (e.g. fetch failed) -> don't nag.
+    if (!mounted || me == null || me.isProfileComplete == true) return;
+
+    Get.dialog(
+      SimpleDialogWidget(
+        icon: LucideIcons.shield_alert,
+        iconColor: XColors.warning,
+        message:
+            'Your profile is incomplete. Please complete your profile to get the best out of Fitbud.',
+        onOk: () => Get.to(() => ProfileDataGatheringScreen()),
+      ),
+      barrierDismissible: false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

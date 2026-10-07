@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 
 import '../../../common/appbar/common_appbar.dart';
+import '../../../common/bottom_sheets/report_reason_sheet.dart';
 import '../../../common/bottom_sheets/session_invite_sheet.dart';
 import '../../../common/widgets/simple_dialog.dart';
 import '../../../common/widgets/two_buttons_dialog.dart';
@@ -94,6 +95,8 @@ class BuddyProfileScreen extends StatelessWidget {
               buddyUserId: buddyUserId,
               conversationId: conversationId,
             ),
+          // Report/Block is offered regardless of relationship status.
+          _ReportBlockMenu(buddyUserId: buddyUserId),
         ],
       ),
       body: FutureBuilder<AppUser>(
@@ -549,9 +552,20 @@ class _ExistingBuddyDropdown extends StatelessWidget {
         iconColor: Colors.red,
         confirmText: "Remove",
         cancelText: "Cancel",
-        onConfirm: () {
-          // keep existing UI; implement removal later if your Friendship repo method exists
-          Get.back();
+        onConfirm: () async {
+          try {
+            await Get.find<BuddyController>().removeBuddy(buddyUserId);
+          } catch (e) {
+            Get.dialog(
+              SimpleDialogWidget(
+                message: e.toString(),
+                icon: LucideIcons.circle_x,
+                iconColor: XColors.danger,
+                buttonText: "Ok",
+                onOk: () => Get.back(),
+              ),
+            );
+          }
         },
       ),
     );
@@ -593,5 +607,133 @@ class _ExistingBuddyDropdown extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Report/Block affordance shown on every buddy profile, regardless of
+/// relationship status - reporting or blocking someone doesn't require
+/// already being their buddy.
+class _ReportBlockMenu extends StatelessWidget {
+  final String buddyUserId;
+  const _ReportBlockMenu({required this.buddyUserId});
+
+  BuddyController get buddyC => Get.find<BuddyController>();
+
+  Future<void> _report(BuildContext context) async {
+    final submission = await showReportReasonSheet(context, title: 'Report User');
+    if (submission == null) return;
+    try {
+      await buddyC.reportUser(
+        buddyUserId,
+        reason: submission.reason,
+        details: submission.details,
+      );
+      Get.dialog(
+        SimpleDialogWidget(
+          message: 'Thanks - your report has been submitted.',
+          icon: LucideIcons.circle_check,
+          iconColor: XColors.primary,
+          buttonText: 'Ok',
+          onOk: () => Get.back(),
+        ),
+      );
+    } catch (e) {
+      Get.dialog(
+        SimpleDialogWidget(
+          message: e.toString(),
+          icon: LucideIcons.circle_x,
+          iconColor: XColors.danger,
+          buttonText: 'Ok',
+          onOk: () => Get.back(),
+        ),
+      );
+    }
+  }
+
+  void _block(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => XButtonsConfirmationDialog(
+        message:
+            "Block this person? They won't be able to message you, invite you, "
+            "or appear in your matches, and any existing buddy connection will "
+            "be removed.",
+        icon: Iconsax.forbidden,
+        iconColor: Colors.red,
+        confirmText: 'Block',
+        cancelText: 'Cancel',
+        onConfirm: () async {
+          try {
+            await buddyC.blockUser(buddyUserId);
+          } catch (e) {
+            Get.dialog(
+              SimpleDialogWidget(
+                message: e.toString(),
+                icon: LucideIcons.circle_x,
+                iconColor: XColors.danger,
+                buttonText: 'Ok',
+                onOk: () => Get.back(),
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  void _unblock() async {
+    try {
+      await buddyC.unblockUser(buddyUserId);
+    } catch (e) {
+      Get.dialog(
+        SimpleDialogWidget(
+          message: e.toString(),
+          icon: LucideIcons.circle_x,
+          iconColor: XColors.danger,
+          buttonText: 'Ok',
+          onOk: () => Get.back(),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final blocked = buddyC.isBlockedByMe(buddyUserId);
+      return PopupMenuButton<String>(
+        icon: const Icon(Iconsax.more, color: XColors.primaryText),
+        color: XColors.secondaryBG,
+        onSelected: (value) {
+          switch (value) {
+            case 'report':
+              _report(context);
+              break;
+            case 'block':
+              _block(context);
+              break;
+            case 'unblock':
+              _unblock();
+              break;
+          }
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'report',
+            child: Text('Report User', style: TextStyle(color: XColors.bodyText)),
+          ),
+          if (blocked)
+            const PopupMenuItem(
+              value: 'unblock',
+              child: Text('Unblock User', style: TextStyle(color: Colors.red)),
+            )
+          else
+            const PopupMenuItem(
+              value: 'block',
+              child: Text('Block User', style: TextStyle(color: Colors.red)),
+            ),
+        ],
+      );
+    });
   }
 }

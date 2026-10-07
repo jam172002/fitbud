@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
@@ -25,7 +26,7 @@ class _UserProfileDetailsScreenState extends State<UserProfileDetailsScreen> {
   bool _saving = false;
 
   // local-only preview when user picks a new image
-  File? _localProfileImage;
+  Uint8List? _localProfileImage;
 
   // About inline editing (keep your current UX)
   bool isEditingAbout = false;
@@ -85,12 +86,12 @@ class _UserProfileDetailsScreenState extends State<UserProfileDetailsScreen> {
     );
     if (image == null) return;
 
-    final file = File(image.path);
-    setState(() => _localProfileImage = file);
+    final bytes = await image.readAsBytes();
+    setState(() => _localProfileImage = bytes);
 
     try {
       setState(() => _saving = true);
-      final url = await repos.authRepo.uploadMyProfileImage(file);
+      final url = await repos.authRepo.uploadMyProfileImage(bytes);
       final res = await authC.updateMeFields({'photoUrl': url});
       if (!res.ok) {
         _error(res.message);
@@ -106,6 +107,10 @@ class _UserProfileDetailsScreenState extends State<UserProfileDetailsScreen> {
   }
 
   void _showImagePicker() {
+    if (kIsWeb) {
+      _pickImage(ImageSource.gallery);
+      return;
+    }
     Get.bottomSheet(
       _bottomSheet([
         _sheetTile("Camera", LucideIcons.camera, () => _pickImage(ImageSource.camera)),
@@ -483,7 +488,7 @@ class _UserProfileDetailsScreenState extends State<UserProfileDetailsScreen> {
         final gymName = goesToGym ? (me.gymName ?? '') : 'Not going to gym';
 
         final imageProvider = _localProfileImage != null
-            ? FileImage(_localProfileImage!)
+            ? MemoryImage(_localProfileImage!)
             : (me.photoUrl != null && me.photoUrl!.isNotEmpty
             ? NetworkImage(me.photoUrl!)
             : const AssetImage("assets/images/buddy.jpg"))

@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 import 'conversation.dart';
 
@@ -23,7 +23,7 @@ class UserConversationIndex implements FirestoreModel {
     required this.unreadCount,
   });
 
-  static UserConversationIndex fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static UserConversationIndex fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return UserConversationIndex(
       id: doc.id,

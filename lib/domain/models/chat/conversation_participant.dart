@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 class ConversationParticipant implements FirestoreModel {
@@ -25,7 +25,7 @@ class ConversationParticipant implements FirestoreModel {
   });
 
   static ConversationParticipant fromDoc(
-      DocumentSnapshot<Map<String, dynamic>> doc, {
+      Doc doc, {
         required String conversationId,
       }) {
     final d = doc.data() ?? {};

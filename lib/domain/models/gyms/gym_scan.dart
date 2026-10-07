@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
+import '../common/geo.dart';
 import '../common/firestore_model.dart';
 
 enum ScanResult {
@@ -40,7 +41,7 @@ class GymScan implements FirestoreModel {
     this.notes = '',
   });
 
-  static GymScan fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static GymScan fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return GymScan(
       id: doc.id,
@@ -50,7 +51,7 @@ class GymScan implements FirestoreModel {
       scannedAt: FirestoreModel.readDate(d['scannedAt']),
       result: scanResultFrom(FirestoreModel.readString(d['result'], fallback: 'denied')),
       deviceId: FirestoreModel.readString(d['deviceId']),
-      scanLocation: d['scanLocation'] is GeoPoint ? d['scanLocation'] as GeoPoint : null,
+      scanLocation: GeoPointX.fromAny(d['scanLocation']),
       notes: FirestoreModel.readString(d['notes']),
     );
   }
@@ -64,7 +65,7 @@ class GymScan implements FirestoreModel {
       'scannedAt': FirestoreModel.ts(scannedAt),
       'result': result.name,
       'deviceId': deviceId,
-      'scanLocation': scanLocation,
+      'scanLocation': scanLocation?.toJson(),
       'notes': notes,
     };
   }

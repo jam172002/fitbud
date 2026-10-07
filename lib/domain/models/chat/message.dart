@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 enum MessageType { text, image, video, audio, file, location, system }
@@ -55,7 +55,7 @@ class Message implements FirestoreModel {
     this.deliveryState = DeliveryState.sent,
   });
 
-  static Message fromDoc(DocumentSnapshot<Map<String, dynamic>> doc, {required String conversationId}) {
+  static Message fromDoc(Doc doc, {required String conversationId}) {
     final d = doc.data() ?? {};
     return Message(
       id: doc.id,

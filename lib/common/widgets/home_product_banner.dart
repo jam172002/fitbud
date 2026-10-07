@@ -16,6 +16,9 @@ class HomeProductBanner extends StatelessWidget {
     required this.imagePath,
   });
 
+  bool get _isNetworkImage =>
+      imagePath.startsWith('http://') || imagePath.startsWith('https://');
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -29,7 +32,7 @@ class HomeProductBanner extends StatelessWidget {
           colors: [XColors.secondaryBG, XColors.secondaryBG.withOpacity(0.7)],
         ),
         image: DecorationImage(
-          image: AssetImage("assets/images/smoke4.png"),
+          image: const AssetImage("assets/images/smoke4.png"),
           fit: BoxFit.cover,
           opacity: 0.3,
           colorFilter: ColorFilter.mode(
@@ -46,9 +49,11 @@ class HomeProductBanner extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     title,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: XColors.primaryText,
@@ -56,6 +61,7 @@ class HomeProductBanner extends StatelessWidget {
                       fontSize: 22,
                     ),
                   ),
+                  const SizedBox(height: 4),
                   Text(
                     description,
                     maxLines: 2,
@@ -84,7 +90,42 @@ class HomeProductBanner extends StatelessWidget {
               ),
             ),
           ),
-          Image.asset(imagePath),
+
+          const SizedBox(width: 8),
+
+          // ✅ Constrained image so Row won’t overflow
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 110,
+              height: 110,
+              child: _isNetworkImage
+                  ? Image.network(
+                imagePath,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stack) {
+                  return const Center(child: Icon(Icons.broken_image));
+                },
+              )
+                  : Image.asset(
+                imagePath,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stack) {
+                  return const Center(child: Icon(Icons.broken_image));
+                },
+              ),
+            ),
+          ),
         ],
       ),
     );

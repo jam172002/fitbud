@@ -7,7 +7,7 @@ import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PasswordResetScreen extends StatefulWidget {
   const PasswordResetScreen({super.key});
@@ -34,7 +34,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
   Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
 
     // If user is NOT logged in, we cannot set password here for Firebase email reset flow.
     if (user == null) {
@@ -55,7 +55,8 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
     setState(() => _busy = true);
 
     try {
-      await user.updatePassword(passwordController.text);
+      await Supabase.instance.client.auth
+          .updateUser(UserAttributes(password: passwordController.text));
 
       Get.dialog(
         SimpleDialogWidget(
@@ -67,9 +68,19 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
         ),
         barrierDismissible: false,
       );
-    } on FirebaseAuthException catch (e) {
+    } on AuthException catch (e) {
       // Common case: requires recent login
-      if (e.code == 'requires-recent-login') {
+      if (e.code == 'reauthentication_needed' || e.code == 'same_password') {
+        if (e.code == 'same_password') {
+          Get.dialog(
+            SimpleDialogWidget(
+              icon: LucideIcons.shield_alert,
+              iconColor: XColors.warning,
+              message: "Your new password must be different from the old one.",
+            ),
+          );
+          return;
+        }
         Get.dialog(
           SimpleDialogWidget(
             icon: LucideIcons.shield_alert,
@@ -86,7 +97,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
           SimpleDialogWidget(
             icon: LucideIcons.shield_alert,
             iconColor: XColors.warning,
-            message: e.message ?? "Failed to update password. Please try again.",
+            message: e.message.isNotEmpty ? e.message : "Failed to update password. Please try again.",
           ),
         );
       }

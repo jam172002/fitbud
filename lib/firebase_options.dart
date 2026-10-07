@@ -41,39 +41,37 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCxCizwD2HI0FNh587GILP7bnZKsmPajFY',
-    appId: '1:900712761830:web:a2b99bc0df870d992f6e27',
-    messagingSenderId: '900712761830',
-    projectId: 'fitbud-46f70',
-    authDomain: 'fitbud-46f70.firebaseapp.com',
-    storageBucket: 'fitbud-46f70.firebasestorage.app',
-    measurementId: 'G-ZTQ0GZWZS1',
+    apiKey: 'AIzaSyDatHFvLjr47xsMUOhJ-rgKOvzekIGC1Uk',
+    appId: '1:6903241866:web:80d8c0ae28d7d6d9696173',
+    messagingSenderId: '6903241866',
+    projectId: 'fitbudpk',
+    authDomain: 'fitbudpk.firebaseapp.com',
+    storageBucket: 'fitbudpk.firebasestorage.app',
+    measurementId: 'G-Q5M50GRZ7P',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyC-qlTQfT7LSxai6Ak-lolUYupFRtvWmls',
-    appId: '1:900712761830:android:d5a3ff698713767c2f6e27',
-    messagingSenderId: '900712761830',
-    projectId: 'fitbud-46f70',
-    storageBucket: 'fitbud-46f70.firebasestorage.app',
+    apiKey: 'AIzaSyCdHsdDmvPtlJCWlZwgAsu8NWfU3hvV2kg',
+    appId: '1:6903241866:android:de08f55801f6c4be696173',
+    messagingSenderId: '6903241866',
+    projectId: 'fitbudpk',
+    storageBucket: 'fitbudpk.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyA8QqFPlaxl1V9PJ7l1r_kz8O-vR0mCiBk',
-    appId: '1:900712761830:ios:cbba31fb5629ef262f6e27',
-    messagingSenderId: '900712761830',
-    projectId: 'fitbud-46f70',
-    storageBucket: 'fitbud-46f70.firebasestorage.app',
-    iosBundleId: 'com.fitbudapp.fitbud',
+    apiKey: 'AIzaSyBcaqxg6GMjaG7rnam9ewCncf0yH8xJk_I',
+    appId: '1:6903241866:ios:afa51df718d2d6c8696173',
+    messagingSenderId: '6903241866',
+    projectId: 'fitbudpk',
+    storageBucket: 'fitbudpk.firebasestorage.app',
+    iosBundleId: 'com.fitbudpk.fitbud',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyA8QqFPlaxl1V9PJ7l1r_kz8O-vR0mCiBk',
     appId: '1:900712761830:ios:cbba31fb5629ef262f6e27',
     messagingSenderId: '900712761830',
     projectId: 'fitbud-46f70',
     storageBucket: 'fitbud-46f70.firebasestorage.app',
-    iosBundleId: 'com.fitbudapp.fitbud',
+    iosBundleId: 'com.fitbudpk.fitbud',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
+import '../common/firestore_model.dart';
 
 class AppUser {
   final String id;
@@ -66,7 +67,7 @@ class AppUser {
   // -----------------------
   // Firestore → Model
   // -----------------------
-  factory AppUser.fromDoc(DocumentSnapshot doc) {
+  factory AppUser.fromDoc(Doc doc) {
     final d = (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
 
     return AppUser(
@@ -79,7 +80,7 @@ class AppUser {
       // Premium fields
       isPremium: (d['isPremium'] ?? false) == true,
       premiumUntil: d['premiumUntil'] != null
-          ? (d['premiumUntil'] as Timestamp).toDate()
+          ? FirestoreModel.readDate(d['premiumUntil'])
           : null,
       activePlanId: d['activePlanId'],
       activeSubscriptionId: d['activeSubscriptionId'],
@@ -95,11 +96,11 @@ class AppUser {
 
       city: d['city'],
       gender: d['gender'],
-      dob: d['dob'] != null ? (d['dob'] as Timestamp).toDate() : null,
+      dob: FirestoreModel.readDate(d['dob']),
 
       isActive: d['isActive'],
-      createdAt: d['createdAt'] != null ? (d['createdAt'] as Timestamp).toDate() : null,
-      updatedAt: d['updatedAt'] != null ? (d['updatedAt'] as Timestamp).toDate() : null,
+      createdAt: FirestoreModel.readDate(d['createdAt']),
+      updatedAt: FirestoreModel.readDate(d['updatedAt']),
     );
   }
 
@@ -114,7 +115,7 @@ class AppUser {
       'photoUrl': photoUrl,
 
       'isPremium': isPremium,
-      'premiumUntil': premiumUntil != null ? Timestamp.fromDate(premiumUntil!) : null,
+      'premiumUntil': FirestoreModel.ts(premiumUntil),
       'activePlanId': activePlanId,
       'activeSubscriptionId': activeSubscriptionId,
 
@@ -129,11 +130,11 @@ class AppUser {
 
       'city': city,
       'gender': gender,
-      'dob': dob != null ? Timestamp.fromDate(dob!) : null,
+      'dob': FirestoreModel.ts(dob),
 
       'isActive': isActive,
-      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
-      'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
+      'createdAt': FirestoreModel.ts(createdAt),
+      'updatedAt': FirestoreModel.ts(updatedAt),
     };
   }
 

@@ -1,5 +1,5 @@
 // lib/domain/models/buddies/buddy_request.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 enum BuddyRequestStatus { pending, accepted, rejected, cancelled, blocked }
@@ -38,7 +38,7 @@ class BuddyRequest implements FirestoreModel {
   bool get isCancelled => status == BuddyRequestStatus.cancelled;
   bool get isBlocked => status == BuddyRequestStatus.blocked;
 
-  static BuddyRequest fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static BuddyRequest fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return BuddyRequest(
       id: doc.id,

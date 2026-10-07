@@ -32,6 +32,11 @@ class _SpecificCatagoryBuddiesMatchScreenState
     _future = buddyC.loadCategoryMatches(activity: widget.activity, limit: 30);
   }
 
+  String _avatarOf(dynamic u) {
+    final v = (u.photoUrl ?? '').toString().trim();
+    return v.isNotEmpty ? v : 'assets/images/buddy.jpg';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -55,53 +60,66 @@ class _SpecificCatagoryBuddiesMatchScreenState
               separatorBuilder: (_, __) => const SizedBox(height: 16),
               itemBuilder: (context, index) {
                 final u = users[index];
-
-                // assuming u has id/photoUrl/displayName/city/gender/dob like AppUser
                 final String buddyUserId = (u.id ?? '').toString();
-                final bool invited = buddyC.busyUserIds.contains(buddyUserId);
 
-                return SpecificBuddyMatchCard(
-                  avatar: (u.photoUrl?.isNotEmpty == true)
-                      ? u.photoUrl!
-                      : 'assets/images/buddy.jpg',
-                  name: (u.displayName ?? 'User'),
-                  location: (u.city ?? ''),
-                  gender: (u.gender ?? ''),
-                  age: _ageFromDob(u.dob)?.toString() ?? '',
-                  isInvited: invited,
+                // ✅ Wrap ONLY the card in Obx (correct GetX usage)
+                return Obx(() {
+                  final bool invited = buddyC.busyUserIds.contains(buddyUserId);
+                  final bool isBuddy = buddyC.buddyIds.contains(buddyUserId);
 
-                  // IMPORTANT:
-                  // 1) Do NOT pass null (if onInvite is non-nullable)
-                  // 2) Do NOT use async if onInvite expects VoidCallback
-                  onInvite: () {
-                    if (invited) return;
-                    if (buddyUserId.isEmpty) return;
+                  return SpecificBuddyMatchCard(
+                    avatar: _avatarOf(u),
+                    name: (u.displayName ?? 'User'),
+                    location: (u.city ?? ''),
+                    gender: (u.gender ?? ''),
+                    age: _ageFromDob(u.dob)?.toString() ?? '',
+                    isInvited: invited,
 
-                    buddyC.inviteUser(buddyUserId).then((_) {
-                      Get.dialog(
-                        SimpleDialogWidget(
-                          message:
-                          "An invitation has been sent to the user to join as your buddy",
-                          icon: LucideIcons.circle_check,
-                          iconColor: XColors.primary,
-                          buttonText: "Ok",
-                          onOk: () => Get.back(),
+                    // ✅ Hide action button if already buddy
+                    onInvite: isBuddy
+                        ? null
+                        : () {
+                      if (invited) return;
+                      if (buddyUserId.isEmpty) return;
+
+                      buddyC.inviteUser(buddyUserId).then((_) {
+                        Get.dialog(
+                          SimpleDialogWidget(
+                            message:
+                            "An invitation has been sent to the user to join as your buddy",
+                            icon: LucideIcons.circle_check,
+                            iconColor: XColors.primary,
+                            buttonText: "Ok",
+                            onOk: () => Get.back(),
+                          ),
+                        );
+                      }).catchError((e) {
+                        Get.dialog(
+                          SimpleDialogWidget(
+                            message: e.toString(),
+                            icon: LucideIcons.circle_x,
+                            iconColor: XColors.danger,
+                            buttonText: "Ok",
+                            onOk: () => Get.back(),
+                          ),
+                        );
+                      });
+                    },
+
+                    onCardTap: () {
+                      if (buddyUserId.isEmpty) return;
+
+                      Get.to(
+                            () => BuddyProfileScreen(
+                          buddyUserId: buddyUserId,
+                          scenario: isBuddy
+                              ? BuddyScenario.buddy
+                              : BuddyScenario.notBuddy,
                         ),
                       );
-                    });
-                  },
-
-                  onCardTap: () {
-                    if (buddyUserId.isEmpty) return;
-
-                    Get.to(
-                          () => BuddyProfileScreen(
-                        buddyUserId: buddyUserId,
-                        scenario: BuddyScenario.notBuddy,
-                      ),
-                    );
-                  },
-                );
+                    },
+                  );
+                });
               },
             );
           },

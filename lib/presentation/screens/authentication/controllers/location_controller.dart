@@ -1,5 +1,6 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show User;
 import 'package:get/get.dart';
 
 import '../../../../domain/models/auth/user_address.dart';
@@ -9,7 +10,6 @@ class LocationController extends GetxController {
   final Rxn<UserAddress> currentAddress = Rxn<UserAddress>();
 
   final _authRepo = Get.find<Repos>().authRepo;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   StreamSubscription<User?>? _authSub;
   StreamSubscription<List<UserAddress>>? _addrSub;
@@ -35,8 +35,8 @@ class LocationController extends GetxController {
     super.onInit();
 
     // Wait for auth to be ready, then bind streams
-    _authSub = _auth.authStateChanges().listen((u) {
-      final uid = u?.uid;
+    _authSub = _authRepo.authState().listen((u) {
+      final uid = u?.id;
 
       // Signed out
       if (uid == null) {
@@ -60,14 +60,14 @@ class LocationController extends GetxController {
     _addrSub = _authRepo.watchMyAddresses(limit: 50).listen((list) {
       _latestAddresses = list;
       _applySelection();
-    });
+    }, onError: (e) => debugPrint('addresses stream error: $e'));
 
     // Selected address id from settings
     _selSub = _authRepo.watchSelectedAddressId().listen((id) {
       final v = (id ?? '').trim();
       _selectedAddressId = v.isEmpty ? null : v;
       _applySelection();
-    });
+    }, onError: (e) => debugPrint('selected address stream error: $e'));
   }
 
   void _unbindStreams() {

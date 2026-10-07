@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 class PaymentTransaction implements FirestoreModel {
@@ -26,7 +26,7 @@ class PaymentTransaction implements FirestoreModel {
     this.createdAt,
   });
 
-  static PaymentTransaction fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static PaymentTransaction fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return PaymentTransaction(
       id: doc.id,

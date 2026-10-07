@@ -1,89 +1,78 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter/cupertino.dart';
+import '../../../domain/models/common/geo.dart';
 import '../../../domain/models/gyms/gym_scan.dart';
-import '../firestore_paths.dart';
-import '../firestore_repo_base.dart';
-import '../repo_exceptions.dart';
+import '../../../data/doc.dart';
+import '../../../utils/qr_parser.dart';
+import '../repo_base.dart';
 
 class ScanRepo extends RepoBase {
-  final FirebaseAuth auth;
-  final FirebaseFunctions functions;
+  ScanRepo(super.db);
 
-  ScanRepo(super.db, this.auth, this.functions);
-
-  String _uid() {
-    final u = auth.currentUser;
-    if (u == null) throw PermissionException('User is not signed in');
-    return u.uid;
+  /// Maps a scans row to the [GymScan] model (`status: accepted` => allowed).
+  static GymScan scanFromRow(Map<String, dynamic> row) {
+    final doc = Doc.fromRow(row);
+    final d = Map<String, dynamic>.from(doc.data())
+      ..['result'] = row['status'] == 'accepted' ? 'allowed' : 'denied';
+    return GymScan.fromDoc(Doc(doc.id, d));
   }
 
   Stream<List<GymScan>> watchMyScanHistory({int limit = 100}) {
-    final uid = _uid();
-    return col(FirestorePaths.scans)
-        .where('userId', isEqualTo: uid)
-        .orderBy('scannedAt', descending: true)
+    final uid = requireUid();
+    return db
+        .from('scans')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', uid)
+        .order('scanned_at', ascending: false)
         .limit(limit)
-        .snapshots()
-        .map((q) => q.docs.map(GymScan.fromDoc).toList());
+        .map((rows) => rows.map(scanFromRow).toList());
   }
 
-
-  /// SECURE FLOW (Recommended):
-  /// Calls Cloud Function validateGymScan which:
-  /// - validates subscription + plan limits
-  /// - checks gym active
-  /// - checks cooldown / anti-fraud
-  /// - writes GymScan doc server-side
-  ///
-  /// Expected callable response:
-  /// { scanId: string, result: string, message: string }
-  Future<Map<String, dynamic>> validateAndCreateScan({
-    required String qrPayload,      // scanned string (contains gym public id + token/version etc.)
-    GeoPoint? scanLocation,
-    String deviceId = '',
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    debugPrint('AUTH USER: ${user?.uid}');
-
-    final uid = _uid();
-    final callable = functions.httpsCallable('scanGym');
-    final res = await callable.call(<String, dynamic>{
-      'userId': uid,
-      'qrPayload': qrPayload,
-      'scanLocation': scanLocation == null ? null : {
-        'lat': scanLocation.latitude,
-        'lng': scanLocation.longitude,
-      },
-      'deviceId': deviceId,
-    });
-    return Map<String, dynamic>.from(res.data as Map);
+  /// Raw camelCase scan maps (`scannedAt` as DateTime) for the history
+  /// screens; optionally limited to one gym.
+  Stream<List<Map<String, dynamic>>> watchScanMaps({String? gymId, int limit = 500}) {
+    final uid = requireUid();
+    return db
+        .from('scans')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', uid)
+        .order('scanned_at', ascending: false)
+        .limit(limit)
+        .map((rows) => rows
+            .where((r) => gymId == null || r['gym_id'] == gymId)
+            .map((r) {
+              final m = DbRow.toCamel(r);
+              m['scannedAt'] = DateTime.tryParse('${r['scanned_at']}')?.toLocal();
+              return m;
+            })
+            .toList());
   }
 
-  /// TESTING-ONLY: client writes a scan directly.
-  /// Only use if your rules allow it.
-  Future<String> createScanClientWrite({
+  Future<Map<String, dynamic>> _scanGym({
     required String gymId,
-    required ScanResult result,
-    String subscriptionId = '',
+    required String clientScanId,
+    required String deviceId,
+  }) async {
+    final res = await db.rpc('scan_gym', params: {
+      'p_gym_id': gymId,
+      'p_client_scan_id': clientScanId,
+      'p_device_id': deviceId,
+    });
+    return Map<String, dynamic>.from(res as Map);
+  }
+
+  Future<Map<String, dynamic>> validateAndCreateScan({
+    required String qrPayload,
     GeoPoint? scanLocation,
     String deviceId = '',
-    String notes = '',
   }) async {
-    final uid = _uid();
-    final ref = col(FirestorePaths.scans).doc();
-    await ref.set({
-      'userId': uid,
-      'gymId': gymId,
-      'subscriptionId': subscriptionId,
-      'scannedAt': FieldValue.serverTimestamp(),
-      'result': result.name,
-      'deviceId': deviceId,
-      'scanLocation': scanLocation,
-      'notes': notes,
-    });
-    return ref.id;
+    final uid = requireUid();
+
+    final gymId = extractGymId(qrPayload);
+    if (gymId == null || gymId.isEmpty) {
+      throw Exception('Invalid QR code — could not read gym ID.');
+    }
+
+    final clientScanId = '${uid}_${gymId}_${DateTime.now().millisecondsSinceEpoch}';
+    return _scanGym(gymId: gymId, clientScanId: clientScanId, deviceId: deviceId);
   }
 
   Future<Map<String, dynamic>> checkInToGym({
@@ -91,16 +80,7 @@ class ScanRepo extends RepoBase {
     required String clientCheckinId,
     String deviceId = '',
   }) async {
-    _uid(); // ensures signed in
-
-    final callable = functions.httpsCallable('scanGym');
-    final res = await callable.call(<String, dynamic>{
-      'gymId': gymId,
-      'clientCheckinId': clientCheckinId,
-      'deviceId': deviceId,
-    });
-
-    return Map<String, dynamic>.from(res.data as Map);
+    requireUid();
+    return _scanGym(gymId: gymId, clientScanId: clientCheckinId, deviceId: deviceId);
   }
-
 }

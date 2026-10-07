@@ -1,32 +1,13 @@
 {
   "project_info": {
-    "project_number": "900712761830",
-    "project_id": "fitbud-46f70",
-    "storage_bucket": "fitbud-46f70.firebasestorage.app"
+    "project_number": "6903241866",
+    "project_id": "fitbudpk",
+    "storage_bucket": "fitbudpk.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:900712761830:android:d5a3ff698713767c2f6e27",
-        "android_client_info": {
-          "package_name": "com.example.fitbud"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyC-qlTQfT7LSxai6Ak-lolUYupFRtvWmls"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:900712761830:android:8c78d235bdd77fa52f6e27",
+        "mobilesdk_app_id": "1:6903241866:android:77952354157e5bd6696173",
         "android_client_info": {
           "package_name": "com.example.fitbud_admin"
         }
@@ -34,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC-qlTQfT7LSxai6Ak-lolUYupFRtvWmls"
+          "current_key": "AIzaSyCdHsdDmvPtlJCWlZwgAsu8NWfU3hvV2kg"
         }
       ],
       "services": {
@@ -45,15 +26,15 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:900712761830:android:7485128e5019960e2f6e27",
+        "mobilesdk_app_id": "1:6903241866:android:de08f55801f6c4be696173",
         "android_client_info": {
-          "package_name": "com.fitbudapp.fitbud"
+          "package_name": "com.fitbudpk.fitbud"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC-qlTQfT7LSxai6Ak-lolUYupFRtvWmls"
+          "current_key": "AIzaSyCdHsdDmvPtlJCWlZwgAsu8NWfU3hvV2kg"
         }
       ],
       "services": {

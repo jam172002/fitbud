@@ -1,33 +1,24 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../../domain/models/gyms/gym.dart';
 import '../../models/plans/plan.dart';
 import '../../models/subscription/subscription.dart';
 import '../../models/subscription/payment_transaction.dart';
-import '../firestore_paths.dart';
-import '../firestore_repo_base.dart';
+import '../repo_base.dart';
 import '../repo_exceptions.dart';
 
 class GymRepo extends RepoBase {
-  final FirebaseAuth auth;
-  GymRepo(super.db, this.auth);
-
-  String _uid() {
-    final u = auth.currentUser;
-    if (u == null) throw PermissionException('User is not signed in');
-    return u.uid;
-  }
+  GymRepo(super.db);
 
   // ---- Gyms ----
 
   Stream<List<Gym>> watchGyms({String city = '', int limit = 50}) {
-    var q = col(FirestorePaths.gyms)
-        .where('status', isEqualTo: GymStatus.active.name);
-
-    if (city.isNotEmpty) q = q.where('city', isEqualTo: city);
-
-    // Do not orderBy until all docs guaranteed to have createdAt
-    return q.limit(limit).snapshots().map((s) {
-      final list = s.docs.map(Gym.fromDoc).toList();
+    return streamDocs(
+      'gyms',
+      eqColumn: 'status',
+      eqValue: GymStatus.active.name,
+      limit: limit,
+      where: city.isEmpty ? null : (r) => r['city'] == city,
+    ).map((l) {
+      final list = l.map(Gym.fromDoc).toList();
       list.sort((a, b) {
         final ad = a.createdAt ?? a.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         final bd = b.createdAt ?? b.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -37,66 +28,58 @@ class GymRepo extends RepoBase {
     });
   }
 
-
   Future<Gym> getGym(String gymId) async {
-    final s = await doc('${FirestorePaths.gyms}/$gymId').get();
-    if (!s.exists) throw NotFoundException('Gym not found');
-    return Gym.fromDoc(s);
+    final row = await db.from('gyms').select().eq('id', gymId).maybeSingle();
+    if (row == null) throw NotFoundException('Gym not found');
+    return Gym.fromDoc(docOf(row));
   }
 
   // ---- Plans ----
 
   Stream<List<Plan>> watchActivePlans() {
-    return col(FirestorePaths.plans)
-        .where('isActive', isEqualTo: true)
-        .orderBy('createdAt', descending: false)
-        .snapshots()
-        .map((q) => q.docs.map(Plan.fromDoc).toList());
+    return streamDocs('plans', eqColumn: 'is_active', eqValue: true, orderBy: 'created_at', ascending: true)
+        .map((l) => l.map(Plan.fromDoc).toList());
   }
 
   // ---- Subscriptions ----
 
   Stream<List<Subscription>> watchMySubscriptions({int limit = 20}) {
-    final uid = _uid();
-    return col(FirestorePaths.subscriptions)
-        .where('userId', isEqualTo: uid)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((q) => q.docs.map(Subscription.fromDoc).toList());
+    final uid = requireUid();
+    return streamDocs('subscriptions',
+            eqColumn: 'user_id', eqValue: uid, orderBy: 'created_at', limit: limit)
+        .map((l) => l.map(Subscription.fromDoc).toList());
   }
 
   Stream<Subscription?> watchMyActiveSubscription() {
-    final uid = _uid();
-    return col(FirestorePaths.subscriptions)
-        .where('userId', isEqualTo: uid)
-        .where('status', isEqualTo: SubscriptionStatus.active.name)
-        .orderBy('createdAt', descending: true)
-        .limit(1)
-        .snapshots()
-        .map((q) => q.docs.isEmpty ? null : Subscription.fromDoc(q.docs.first));
+    final uid = requireUid();
+    return streamDocs(
+      'subscriptions',
+      eqColumn: 'user_id',
+      eqValue: uid,
+      orderBy: 'created_at',
+      limit: 20,
+      where: (r) => r['status'] == SubscriptionStatus.active.name,
+    ).map((l) => l.isEmpty ? null : Subscription.fromDoc(l.first));
   }
 
   Future<Subscription?> getMyActiveSubscriptionOnce() async {
-    final uid = _uid();
-    final q = await col(FirestorePaths.subscriptions)
-        .where('userId', isEqualTo: uid)
-        .where('status', isEqualTo: SubscriptionStatus.active.name)
-        .orderBy('createdAt', descending: true)
-        .limit(1)
-        .get();
-    if (q.docs.isEmpty) return null;
-    return Subscription.fromDoc(q.docs.first);
+    final uid = requireUid();
+    final rows = await db
+        .from('subscriptions')
+        .select()
+        .eq('user_id', uid)
+        .eq('status', SubscriptionStatus.active.name)
+        .order('created_at', ascending: false)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return Subscription.fromDoc(docOf(rows.first));
   }
 
   // Payment transactions history (optional screen)
   Stream<List<PaymentTransaction>> watchMyTransactions({int limit = 50}) {
-    final uid = _uid();
-    return col(FirestorePaths.transactions)
-        .where('userId', isEqualTo: uid)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((q) => q.docs.map(PaymentTransaction.fromDoc).toList());
+    final uid = requireUid();
+    return streamDocs('transactions',
+            eqColumn: 'user_id', eqValue: uid, orderBy: 'created_at', limit: limit)
+        .map((l) => l.map(PaymentTransaction.fromDoc).toList());
   }
 }

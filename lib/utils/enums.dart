@@ -1,4 +1,4 @@
-enum BuddyScenario { notBuddy, requestReceived, existingBuddy }
+enum BuddyScenario { notBuddy, requestReceived, existingBuddy, buddy }
 
 enum PaymentMethod { jazzcash, easypaisa, card }
 

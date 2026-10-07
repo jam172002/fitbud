@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
+import '../common/firestore_model.dart';
 
 class Activity {
   final String id;
@@ -24,7 +25,7 @@ class Activity {
   // -----------------------
   // Firestore deserialization
   // -----------------------
-  factory Activity.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory Activity.fromDoc(Doc doc) {
     final data = doc.data()!;
     return Activity(
       id: doc.id,
@@ -33,8 +34,8 @@ class Activity {
       isActive: (data['isActive'] ?? true) as bool,
       iconUrl: (data['iconUrl'] ?? '') as String,
       imageUrl: (data['imageUrl'] ?? '') as String,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      createdAt: FirestoreModel.readDate(data['createdAt']),
+      updatedAt: FirestoreModel.readDate(data['updatedAt']),
     );
   }
 
@@ -46,10 +47,8 @@ class Activity {
       'name': name,
       'order': order,
       'isActive': isActive,
-      'createdAt': createdAt != null
-          ? Timestamp.fromDate(createdAt!)
-          : FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+      'iconUrl': iconUrl,
+      'imageUrl': imageUrl,
     };
   }
 

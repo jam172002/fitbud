@@ -1,104 +1,36 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-import '../../../domain/models/chat/conversation.dart';
-import '../../../domain/models/chat/conversation_participant.dart';
-import '../../../domain/models/chat/message.dart';
-import '../../../domain/models/chat/user_conversation_index.dart';
-import '../firestore_paths.dart';
-import '../firestore_repo_base.dart';
+import '../../models/chat/conversation.dart';
+import '../../models/chat/conversation_participant.dart';
+import '../../models/chat/message.dart';
+import '../../models/chat/user_conversation_index.dart';
+import '../repo_base.dart';
 import '../repo_exceptions.dart';
 
 class ChatRepo extends RepoBase {
-  final FirebaseAuth auth;
-  ChatRepo(super.db, this.auth);
+  ChatRepo(super.db);
 
-  String _uid() {
-    final u = auth.currentUser;
-    if (u == null) throw PermissionException('User is not signed in');
-    return u.uid;
-  }
-
-  // ✅ UPDATED: must return cleaned id reliably
   String _cleanId(String v) {
     final id = v.trim();
     if (id.isEmpty) return '';
-    // prevent "/abc" or "abc/" from producing bad paths
+    // prevent "/abc" or "abc/" from producing bad ids
     return id.replaceAll(RegExp(r'^/+|/+$'), '');
-  }
-
-  // -----------------------------
-  // Helpers
-  // -----------------------------
-/*  String _sortedPairKey(String a, String b) {
-    final s = [a, b]..sort();
-    return '${s[0]}_${s[1]}';
-  }*/
-
-  String _directConversationId(String a, String b) {
-    final s = [a, b]..sort();
-    return 'direct_${s[0]}_${s[1]}';
-  }
-
-  String _preview({required MessageType type, required String text}) {
-    switch (type) {
-      case MessageType.text:
-        final t = text.trim();
-        if (t.isEmpty) return '';
-        return t.length > 60 ? '${t.substring(0, 60)}…' : t;
-      case MessageType.image:
-        return 'Photo';
-      case MessageType.video:
-        return 'Video';
-      case MessageType.audio:
-        return 'Audio';
-      case MessageType.file:
-        return 'File';
-      case MessageType.location:
-        return 'Location';
-      case MessageType.system:
-        return 'System';
-    }
   }
 
   // -----------------------------
   // Inbox
   // -----------------------------
-  Stream<List<(UserConversationIndex idx, Conversation? conv)>> watchMyInbox({int limit = 50}) {
-    final uid = _uid();
-
-    // NOTE: FirestorePaths.userConversations(uid) is now alias to userInbox(uid)
-    return col(FirestorePaths.userConversations(uid))
-        .orderBy('updatedAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .asyncMap((idxSnap) async {
-      final idxItems = idxSnap.docs.map(UserConversationIndex.fromDoc).toList();
-      if (idxItems.isEmpty) return <(UserConversationIndex, Conversation?)>[];
-
-      final ids = idxItems
-          .map((e) => _cleanId(e.conversationId))
-          .where((e) => e.isNotEmpty)
-          .toList();
-
-      if (ids.isEmpty) return <(UserConversationIndex, Conversation?)>[];
-
-      final convMap = <String, Conversation>{};
-
-      for (var i = 0; i < ids.length; i += 10) {
-        final chunk = ids.sublist(i, (i + 10).clamp(0, ids.length));
-        final snap = await db
-            .collection(FirestorePaths.conversations)
-            .where(FieldPath.documentId, whereIn: chunk)
-            .get();
-
-        for (final d in snap.docs) {
-          convMap[d.id] = Conversation.fromDoc(d);
-        }
-      }
-
-      return idxItems.map((idx) => (idx, convMap[_cleanId(idx.conversationId)])).toList();
-    });
+  /// Index rows carry everything the inbox list needs (title, last message,
+  /// unread count, type); they're maintained server-side by a trigger.
+  Stream<List<(UserConversationIndex idx, Conversation? conv)>> watchMyInbox({int limit = 30}) {
+    final uid = requireUid();
+    return streamDocs(
+      'inbox',
+      pk: ['user_id', 'conversation_id'],
+      idKey: 'conversation_id',
+      eqColumn: 'user_id',
+      eqValue: uid,
+      orderBy: 'updated_at',
+      limit: limit,
+    ).map((l) => l.map((d) => (UserConversationIndex.fromDoc(d), null as Conversation?)).toList());
   }
 
   // -----------------------------
@@ -108,176 +40,78 @@ class ChatRepo extends RepoBase {
     final id = _cleanId(conversationId);
     if (id.isEmpty) return const Stream.empty();
 
-    return col(FirestorePaths.conversationParticipants(id))
-        .snapshots()
-        .map((q) => q.docs.map((d) => ConversationParticipant.fromDoc(d, conversationId: id)).toList());
+    return streamDocs(
+      'conversation_participants',
+      pk: ['conversation_id', 'user_id'],
+      idKey: 'user_id',
+      eqColumn: 'conversation_id',
+      eqValue: id,
+    ).map((l) => l.map((d) => ConversationParticipant.fromDoc(d, conversationId: id)).toList());
   }
 
   Future<List<String>> _participantIdsOnce(String conversationId) async {
     final id = _cleanId(conversationId);
     if (id.isEmpty) return <String>[];
-    final snap = await col(FirestorePaths.conversationParticipants(id)).get();
-    return snap.docs.map((d) => d.id).toList();
+    final rows = await db
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', id);
+    return rows.map((r) => r['user_id'] as String).toList();
   }
 
   // -----------------------------
   // Direct: get or create
   // -----------------------------
   Future<String> getOrCreateDirectConversation({required String otherUserId}) async {
-    final uid = _uid();
+    final uid = requireUid();
     final other = _cleanId(otherUserId);
 
-    if (other.isEmpty) throw RepoException('Other user id is empty', 'invalid_user');
-    if (other == uid) throw RepoException('Cannot chat with yourself', 'self_chat_not_allowed');
+    if (other.isEmpty) throw RepoException('invalid_user', 'Other user id is empty');
+    if (other == uid) throw RepoException('self_chat_not_allowed', 'Cannot chat with yourself');
 
-    final convId = _directConversationId(uid, other);
-    final convRef = doc('${FirestorePaths.conversations}/$convId');
-
-    final existing = await convRef.get();
-    if (existing.exists) return convId;
-
-    final now = FieldValue.serverTimestamp();
-
-    await db.runTransaction((tx) async {
-      final check = await tx.get(convRef);
-      if (check.exists) return;
-
-      tx.set(convRef, {
-        'type': ConversationType.direct.name,
-        'title': '',
-        'groupId': '',
-        'createdByUserId': uid,
-        'createdAt': now,
-        'updatedAt': now,
-        'lastMessageId': '',
-        'lastMessagePreview': '',
-        'lastMessageAt': null,
-      });
-
-      tx.set(doc('${FirestorePaths.conversationParticipants(convId)}/$uid'), {
-        'userId': uid,
-        'joinedAt': now,
-        'lastReadAt': now,
-        'isMuted': false,
-        'mutedUntil': null,
-      });
-
-      tx.set(doc('${FirestorePaths.conversationParticipants(convId)}/$other'), {
-        'userId': other,
-        'joinedAt': now,
-        'lastReadAt': null,
-        'isMuted': false,
-        'mutedUntil': null,
-      });
-
-      // ✅ UPDATED: ensure updatedAt exists for ordering + show without messages
-      tx.set(
-        doc('${FirestorePaths.userConversations(uid)}/$convId'),
-        {
-          'conversationId': convId,
-          'type': ConversationType.direct.name,
-          'title': '',
-          'lastMessageAt': null,
-          'lastMessagePreview': '',
-          'unreadCount': 0,
-          'updatedAt': now, // ✅
-          'createdAt': now, // optional but useful
-        },
-        SetOptions(merge: true),
-      );
-
-      tx.set(
-        doc('${FirestorePaths.userConversations(other)}/$convId'),
-        {
-          'conversationId': convId,
-          'type': ConversationType.direct.name,
-          'title': '',
-          'lastMessageAt': null,
-          'lastMessagePreview': '',
-          'unreadCount': 0,
-          'updatedAt': now, // ✅
-          'createdAt': now, // optional but useful
-        },
-        SetOptions(merge: true),
-      );
-    });
-
-    return convId;
+    final id = await db.rpc('get_or_create_direct_conversation', params: {'other': other});
+    return '$id';
   }
 
   // -----------------------------
-  // Group creation (older chat-only)
+  // Group creation (chat group)
   // -----------------------------
   Future<String> createGroupConversation({
     required String title,
     required List<String> memberUserIds,
   }) async {
-    final uid = _uid();
-    final members = {...memberUserIds, uid}.toList();
-
-    final convRef = col(FirestorePaths.conversations).doc();
-    final now = FieldValue.serverTimestamp();
-
-    await db.runTransaction((tx) async {
-      tx.set(convRef, {
-        'type': ConversationType.group.name,
-        'title': title.trim(),
-        'groupId': '',
-        'createdByUserId': uid,
-        'createdAt': now,
-        'updatedAt': now,
-        'lastMessageId': '',
-        'lastMessagePreview': '',
-        'lastMessageAt': null,
-      });
-
-      for (final m in members) {
-        tx.set(doc('${FirestorePaths.conversationParticipants(convRef.id)}/$m'), {
-          'userId': m,
-          'joinedAt': now,
-          'lastReadAt': m == uid ? now : null,
-          'isMuted': false,
-          'mutedUntil': null,
-        });
-
-        // ✅ UPDATED: ensure updatedAt exists so it appears in inbox without messages
-        tx.set(
-          doc('${FirestorePaths.userConversations(m)}/${convRef.id}'),
-          {
-            'conversationId': convRef.id,
-            'type': ConversationType.group.name,
-            'title': title.trim(),
-            'lastMessageAt': null,
-            'lastMessagePreview': '',
-            'unreadCount': 0,
-            'updatedAt': now, // ✅
-            'createdAt': now, // optional
-          },
-          SetOptions(merge: true),
-        );
-      }
+    final gid = await db.rpc('create_group', params: {
+      'p_group_id': '',
+      'p_title': title.trim(),
+      'p_description': '',
+      'p_photo_url': '',
+      'p_members': memberUserIds,
     });
-
-    return convRef.id;
+    return 'group_$gid';
   }
 
   // -----------------------------
   // Messages
   // -----------------------------
-  Stream<List<Message>> watchMessages(String conversationId, {int limit = 100}) {
+  Stream<List<Message>> watchMessages(String conversationId, {int limit = 50}) {
     final id = _cleanId(conversationId);
     if (id.isEmpty) return const Stream.empty();
 
-    return col(FirestorePaths.conversationMessages(id))
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((q) => q.docs.map((d) => Message.fromDoc(d, conversationId: id)).toList());
+    return streamDocs(
+      'messages',
+      eqColumn: 'conversation_id',
+      eqValue: id,
+      orderBy: 'created_at',
+      limit: limit,
+    ).map((l) => l.map((d) => Message.fromDoc(d, conversationId: id)).toList());
   }
 
+  /// Inserts the message; a database trigger updates the conversation, every
+  /// participant's inbox row (unread counts) and the notifications.
   Future<String> sendMessage({
     required String conversationId,
     required MessageType type,
+    List<String>? participantIds, // kept for call-site compatibility; unused
     String text = '',
     String mediaUrl = '',
     String thumbnailUrl = '',
@@ -287,166 +121,85 @@ class ChatRepo extends RepoBase {
     String clientMessageId = '',
     DateTime? clientCreatedAt,
   }) async {
-    final uid = _uid();
+    final uid = requireUid();
     final cid = _cleanId(conversationId);
+    if (cid.isEmpty) throw RepoException('invalid_conversation', 'Conversation id is empty');
 
-    if (cid.isEmpty) throw RepoException('Conversation id is empty', 'invalid_conversation');
-
-    final me = await doc('${FirestorePaths.conversationParticipants(cid)}/$uid').get();
-    if (!me.exists) throw PermissionException('Not a participant');
-
-    final participantIds = await _participantIdsOnce(cid);
-    final msgRef = col(FirestorePaths.conversationMessages(cid)).doc();
-
-    final now = FieldValue.serverTimestamp();
-    final preview = _preview(type: type, text: text);
-
-    await db.runTransaction((tx) async {
-      tx.set(msgRef, {
-        'senderUserId': uid,
-        'type': type.name,
-        'text': text,
-        'mediaUrl': mediaUrl,
-        'thumbnailUrl': thumbnailUrl,
-        'lat': lat,
-        'lng': lng,
-        'replyToMessageId': replyToMessageId,
-        'createdAt': now,
-        'clientMessageId': clientMessageId,
-        'clientCreatedAt': clientCreatedAt == null ? null : Timestamp.fromDate(clientCreatedAt),
-
-        'isDeleted': false,
-        'deliveryState': DeliveryState.sent.name,
-      });
-
-      tx.update(
-        doc('${FirestorePaths.conversations}/$cid'),
-        {
-          'lastMessageId': msgRef.id,
-          'lastMessagePreview': preview,
-          'lastMessageAt': now,
-          'updatedAt': now,
-        },
-      );
-
-      for (final pid in participantIds) {
-        // ✅ UPDATED: write updatedAt for ordering + still keep unread logic same
-        tx.set(
-          doc('${FirestorePaths.userConversations(pid)}/$cid'),
-          {
-            'conversationId': cid,
-            'lastMessageAt': now,
-            'lastMessagePreview': preview,
-            'unreadCount': pid == uid ? 0 : FieldValue.increment(1),
-            'updatedAt': now, // ✅
-          },
-          SetOptions(merge: true),
-        );
-      }
-    });
-
-    return msgRef.id;
+    final row = await db
+        .from('messages')
+        .insert({
+          'conversation_id': cid,
+          'sender_user_id': uid,
+          'type': type.name,
+          'text': text,
+          'media_url': mediaUrl,
+          'thumbnail_url': thumbnailUrl,
+          'lat': lat,
+          'lng': lng,
+          'reply_to_message_id': replyToMessageId,
+          'client_message_id': clientMessageId,
+          'client_created_at': clientCreatedAt?.toUtc().toIso8601String(),
+        })
+        .select('id')
+        .single();
+    return row['id'] as String;
   }
 
   Future<void> markConversationRead(String conversationId) async {
-    final uid = _uid();
     final cid = _cleanId(conversationId);
     if (cid.isEmpty) return;
-
-    final now = FieldValue.serverTimestamp();
-    final batch = db.batch();
-
-    batch.set(
-      doc('${FirestorePaths.conversationParticipants(cid)}/$uid'),
-      {'userId': uid, 'lastReadAt': now},
-      SetOptions(merge: true),
-    );
-
-    // ✅ UPDATED: also set updatedAt (keeps ordering stable after read actions)
-    batch.set(
-      doc('${FirestorePaths.userConversations(uid)}/$cid'),
-      {'unreadCount': 0, 'updatedAt': now},
-      SetOptions(merge: true),
-    );
-
-    await batch.commit();
+    await db.rpc('mark_conversation_read', params: {'cid': cid});
   }
 
   Future<void> leaveConversation(String conversationId) async {
-    final uid = _uid();
     final cid = _cleanId(conversationId);
     if (cid.isEmpty) return;
-
-    final batch = db.batch();
-    batch.delete(doc('${FirestorePaths.conversationParticipants(cid)}/$uid'));
-    batch.delete(doc('${FirestorePaths.userConversations(uid)}/$cid'));
-    await batch.commit();
+    await db.rpc('leave_conversation', params: {'cid': cid});
   }
 
-  // In ChatRepo
   Stream<DateTime?> watchMyClearedAt(String conversationId) {
-    final uid = _uid();
+    final uid = requireUid();
     final cid = _cleanId(conversationId);
     if (cid.isEmpty) return const Stream.empty();
 
-    return doc('${FirestorePaths.conversationParticipants(cid)}/$uid')
-        .snapshots()
-        .map((snap) {
-      if (!snap.exists) return null;
-      final data = snap.data() ?? {};
-      final ts = data['clearedAt'];
-      if (ts is Timestamp) return ts.toDate();
-      return null;
+    return streamDocs(
+      'conversation_participants',
+      pk: ['conversation_id', 'user_id'],
+      idKey: 'user_id',
+      eqColumn: 'conversation_id',
+      eqValue: cid,
+      where: (r) => r['user_id'] == uid,
+    ).map((l) {
+      if (l.isEmpty) return null;
+      return FirestoreModelDate.read(l.first.data()['clearedAt']);
     });
   }
 
   /// "Delete chat" (clear for me only) - works for direct and group.
-  /// - Marks my participant doc with clearedAt
-  /// - Deletes my inbox index doc so it disappears from Inbox
   Future<void> deleteChatForMe(String conversationId) async {
-    final uid = _uid();
     final cid = _cleanId(conversationId);
     if (cid.isEmpty) return;
-
-    // Make sure I'm a participant (otherwise no-op)
-    final meRef = doc('${FirestorePaths.conversationParticipants(cid)}/$uid');
-    final meSnap = await meRef.get();
-    if (!meSnap.exists) {
-      throw PermissionException('Not a participant');
-    }
-
-    final batch = db.batch();
-    final now = FieldValue.serverTimestamp();
-
-    // 1) Store clearedAt on participant (so UI filters old messages)
-    batch.set(
-      meRef,
-      {
-        'userId': uid,
-        'clearedAt': now,
-        'lastReadAt': now, // optional but keeps unread sane
-      },
-      SetOptions(merge: true),
-    );
-
-    // 2) Remove it from inbox list for me
-    batch.delete(doc('${FirestorePaths.userConversations(uid)}/$cid'));
-
-    await batch.commit();
+    await db.rpc('delete_chat_for_me', params: {'cid': cid});
   }
 
   Future<void> markConversationDelivered(String conversationId) async {
-    final uid = _uid();
+    final uid = requireUid();
     final cid = _cleanId(conversationId);
     if (cid.isEmpty) return;
 
-    await doc('${FirestorePaths.conversationParticipants(cid)}/$uid').set(
-      {
-        'userId': uid,
-        'lastDeliveredAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    await db
+        .from('conversation_participants')
+        .update({'last_delivered_at': DateTime.now().toUtc().toIso8601String()})
+        .eq('conversation_id', cid)
+        .eq('user_id', uid);
   }
+}
 
+/// Tiny date reader so this file doesn't need the model helper import.
+class FirestoreModelDate {
+  static DateTime? read(dynamic v) {
+    if (v is DateTime) return v.toLocal();
+    if (v is String) return DateTime.tryParse(v)?.toLocal();
+    return null;
+  }
 }
