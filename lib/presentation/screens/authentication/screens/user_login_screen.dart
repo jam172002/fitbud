@@ -5,12 +5,14 @@ import '../../../../common/widgets/form_field.dart';
 import '../../../../common/widgets/simple_dialog.dart';
 import '../../navigation/user_navigation.dart';
 import '../controllers/auth_controller.dart';
+import '../controllers/auth_result.dart';
 import 'package:fitbud/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:get/get.dart';
 
 import 'enter_email_screen.dart';
+import 'profile_setup_screens/profile_data_gathering_screen.dart';
 
 
 class UserLoginScreen extends StatefulWidget {
@@ -57,6 +59,51 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _social(Future<AuthResult> Function() signIn) async {
+    final res = await signIn();
+    if (!mounted) return;
+
+    if (res.ok) {
+      await authC.loadMe();
+      if (authC.me.value?.isProfileComplete != true) {
+        Get.offAll(() => ProfileDataGatheringScreen());
+      } else {
+        Get.offAll(() => UserNavigation());
+      }
+    } else if (res.code != 'cancelled') {
+      Get.dialog(
+        SimpleDialogWidget(
+          icon: LucideIcons.shield_alert,
+          iconColor: XColors.warning,
+          message: res.message,
+        ),
+      );
+    }
+  }
+
+  Widget _socialButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18, color: XColors.primaryText),
+        label: Text(
+          label,
+          style: TextStyle(fontSize: 14, color: XColors.primaryText),
+        ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          side: BorderSide(color: XColors.bodyText.withValues(alpha: 0.4)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
   }
 
   @override
@@ -161,6 +208,33 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
                         );
                       }),
 
+                      SizedBox(height: spacing),
+
+                      // Social sign-in
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: XColors.bodyText.withValues(alpha: 0.3))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Text('or', style: TextStyle(color: XColors.bodyText, fontSize: 12)),
+                          ),
+                          Expanded(child: Divider(color: XColors.bodyText.withValues(alpha: 0.3))),
+                        ],
+                      ),
+                      SizedBox(height: spacing),
+                      Obx(() => _socialButton(
+                            label: 'Continue with Google',
+                            icon: LucideIcons.globe,
+                            onTap: authC.isLoading.value ? null : () => _social(authC.signInWithGoogle),
+                          )),
+                      if (authC.appleSignInAvailable) ...[
+                        SizedBox(height: spacing),
+                        Obx(() => _socialButton(
+                              label: 'Continue with Apple',
+                              icon: LucideIcons.apple,
+                              onTap: authC.isLoading.value ? null : () => _social(authC.signInWithApple),
+                            )),
+                      ],
                       SizedBox(height: spacing),
 
                       // Forget Password

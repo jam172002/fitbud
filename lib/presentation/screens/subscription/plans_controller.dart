@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 import 'package:get/get.dart';
 
 import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/models/plans/plan.dart';
-import '../../../firebase_instances.dart';
+import '../../../data/doc.dart';
+import '../../../data/supabase_instances.dart';
 import '../../../utils/enums.dart';
 
 /// Thrown by every purchase path until a real payment processor is wired
@@ -19,14 +19,9 @@ class PaymentsUnavailableException implements Exception {
 }
 
 class PremiumPlanController extends GetxController {
-  PremiumPlanController({
-    FirebaseFirestore? db,
-    FirebaseAuth? auth,
-  })  : _db = db ?? FirebaseInstances.db,
-        _auth = auth ?? FirebaseInstances.auth;
+  PremiumPlanController({SupabaseClient? db}) : _db = db ?? SupabaseInstances.client;
 
-  final FirebaseFirestore _db;
-  final FirebaseAuth _auth;
+  final SupabaseClient _db;
 
   // ---- UI expects these names ----
   final RxList<Plan> plans = <Plan>[].obs;
@@ -54,9 +49,9 @@ class PremiumPlanController extends GetxController {
   // DirectPay endpoint names/URLs kept here (rather than deleted) as the
   // reference for whoever implements the real functions - see the
   // PAYMENT_SAFETY_NOTE on startDirectPayPwa().
-  // Cloud Functions to implement: "directPayCreatePaymentUrl" and
-  // "directPayFinalizeFromRedirect" (region: asia-south1), redirecting to
-  // https://fitbud-46f70.web.app/payments/success and .../failed.
+  // Edge functions to implement: "directpay-create-payment-url" and
+  // "directpay-finalize" (supabase/functions), redirecting to your
+  // payments success / failed pages.
 
   @override
   void onInit() {
@@ -153,17 +148,9 @@ class PremiumPlanController extends GetxController {
   }
 
   Future<void> cancelPending({required String orderId}) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    final subRef =
-    _db.collection('users').doc(uid).collection('subscriptions').doc(orderId);
-
-    await subRef.set({
-      'status': 'cancelled',
-      'cancelledAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    // Subscription rows are server-write-only (RLS): cancelling a pending
+    // order has to go through a trusted backend once payments exist.
+    throw PaymentsUnavailableException();
   }
 
   // ---------------- LISTENERS ----------------
@@ -174,11 +161,11 @@ class PremiumPlanController extends GetxController {
 
     _plansSub?.cancel();
     _plansSub = _db
-        .collection('plans')
-        .where('isActive', isEqualTo: true)
-        .snapshots()
-        .listen((snap) {
-      plans.value = snap.docs.map((d) => Plan.fromDoc(d)).toList();
+        .from('plans')
+        .stream(primaryKey: ['id'])
+        .eq('is_active', true)
+        .listen((rows) {
+      plans.value = rows.map((r) => Plan.fromDoc(Doc.fromRow(r))).toList();
       loading.value = false;
       _syncSelectionWithUser();
     }, onError: (e) {
@@ -188,18 +175,18 @@ class PremiumPlanController extends GetxController {
   }
 
   void _listenMe() {
-    final uid = _auth.currentUser?.uid;
+    final uid = SupabaseInstances.uid;
     if (uid == null) return;
 
     _meSub?.cancel();
-    _meSub = _db.collection('users').doc(uid).snapshots().listen((snap) {
-      if (!snap.exists) {
+    _meSub = _db.from('profiles').stream(primaryKey: ['id']).eq('id', uid).listen((rows) {
+      if (rows.isEmpty) {
         me.value = null;
         return;
       }
-      me.value = AppUser.fromDoc(snap);
+      me.value = AppUser.fromDoc(Doc.fromRow(rows.first));
       _syncSelectionWithUser();
-    });
+    }, onError: (e) => error.value = e.toString());
   }
 
   void _syncSelectionWithUser() {

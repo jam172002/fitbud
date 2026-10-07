@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 class UserSettings implements FirestoreModel {
@@ -31,7 +31,7 @@ class UserSettings implements FirestoreModel {
     this.updatedAt,
   });
 
-  static UserSettings fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static UserSettings fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     final sel = FirestoreModel.readString(d['selectedAddressId'], fallback: '').trim();
 

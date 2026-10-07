@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 enum GroupRole { owner, admin, member }
@@ -28,7 +28,7 @@ class GroupMember implements FirestoreModel {
     this.mutedUntil,
   });
 
-  static GroupMember fromDoc(DocumentSnapshot<Map<String, dynamic>> doc, {required String groupId}) {
+  static GroupMember fromDoc(Doc doc, {required String groupId}) {
     final d = doc.data() ?? {};
     return GroupMember(
       id: doc.id,

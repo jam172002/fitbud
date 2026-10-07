@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
+import '../common/geo.dart';
 import '../common/firestore_model.dart';
 
 enum SessionType { gym, game, other }
@@ -55,7 +56,7 @@ class Session implements FirestoreModel {
     this.updatedAt,
   });
 
-  static Session fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static Session fromDoc(Doc doc) {
     final d = doc.data() ?? {};
     return Session(
       id: doc.id,
@@ -65,7 +66,7 @@ class Session implements FirestoreModel {
       createdByUserId: FirestoreModel.readString(d['createdByUserId']),
       startAt: FirestoreModel.readDate(d['startAt']),
       endAt: FirestoreModel.readDate(d['endAt']),
-      location: d['location'] is GeoPoint ? d['location'] as GeoPoint : null,
+      location: GeoPointX.fromAny(d['location']),
       locationName: FirestoreModel.readString(d['locationName']),
       gymId: FirestoreModel.readString(d['gymId']),
       status: sessionStatusFrom(FirestoreModel.readString(d['status'], fallback: 'scheduled')),
@@ -85,7 +86,7 @@ class Session implements FirestoreModel {
       'createdByUserId': createdByUserId,
       'startAt': FirestoreModel.ts(startAt),
       'endAt': FirestoreModel.ts(endAt),
-      'location': location,
+      'location': location?.toJson(),
       'locationName': locationName,
       'gymId': gymId,
       'status': status.name,

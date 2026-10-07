@@ -31,6 +31,7 @@
     <application
         android:label="fitbud"
         android:name="${applicationName}"
+        android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher">
 
         <activity
@@ -50,6 +51,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Supabase auth deep link (password reset / email confirmation) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.fitbudpk.fitbud" android:host="login-callback" />
             </intent-filter>
         </activity>
 

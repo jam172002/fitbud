@@ -1,9 +1,10 @@
 // lib/presentation/screens/gyms/widgets/gym_user_scans_section.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../firebase_instances.dart';
+import '../../../../data/supabase_instances.dart';
+import '../../../../domain/repos/repo_provider.dart';
 import '../../../../utils/colors.dart';
 
 class GymUserScansSection extends StatelessWidget {
@@ -16,21 +17,14 @@ class GymUserScansSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseInstances.auth.currentUser?.uid;
+    final uid = SupabaseInstances.uid;
 
     if (uid == null) {
       return const SizedBox.shrink();
     }
 
-    final query = FirebaseInstances.db
-        .collection('scans')
-        .where('userId', isEqualTo: uid)
-        .where('gymId', isEqualTo: gymId)
-        .orderBy('scannedAt', descending: true)
-        .limit(10);
-
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: query.snapshots(),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: Get.find<Repos>().scanRepo.watchScanMaps(gymId: gymId, limit: 10),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -39,7 +33,7 @@ class GymUserScansSection extends StatelessWidget {
           );
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
@@ -69,15 +63,15 @@ class GymUserScansSection extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: snapshot.data!.docs.length,
+              itemCount: snapshot.data!.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (_, index) {
-                final d = snapshot.data!.docs[index].data();
+                final d = snapshot.data![index];
 
-                final ts = d['scannedAt'] as Timestamp?;
+                final ts = d['scannedAt'] as DateTime?;
                 final date = ts != null
                     ? DateFormat('dd MMM yyyy, hh:mm a')
-                    .format(ts.toDate())
+                    .format(ts)
                     : '--';
 
                 final status = d['status'] ?? 'unknown';

@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient, User;
 import 'package:get/get.dart';
 
 import '../../../domain/models/activities/activity.dart';
@@ -8,20 +7,16 @@ import '../../../domain/models/auth/app_user.dart';
 import '../../../domain/models/product/product.dart';
 import '../../../domain/models/sessions/session_invite.dart';
 import '../../../domain/repos/sessions/session_repo.dart';
-import '../../../firebase_instances.dart';
+import '../../../data/doc.dart';
+import '../../../data/supabase_instances.dart';
 import '../authentication/controllers/auth_controller.dart';
 
 class HomeController extends GetxController {
-  HomeController({
-    FirebaseFirestore? db,
-    FirebaseAuth? auth,
-  })  : _db = db ?? FirebaseInstances.db,
-        _sessionRepo = SessionRepo(
-          db ?? FirebaseInstances.db,
-          auth ?? FirebaseInstances.auth,
-        );
+  HomeController({SupabaseClient? db})
+      : _db = db ?? SupabaseInstances.client,
+        _sessionRepo = SessionRepo(db ?? SupabaseInstances.client);
 
-  final FirebaseFirestore _db;
+  final SupabaseClient _db;
   final SessionRepo _sessionRepo;
 
   // cache auth controller (avoid repeated Get.find calls)
@@ -87,15 +82,15 @@ class HomeController extends GetxController {
     loadingActivities.value = true;
     errActivities.value = '';
     try {
-      final snap = await _db
-          .collection('activities')
-          .where('isActive', isEqualTo: true)
-          .orderBy('order')
-          .limit(50)
-          .get(const GetOptions(source: Source.serverAndCache));
+      final rows = await _db
+          .from('activities')
+          .select()
+          .eq('is_active', true)
+          .order('order')
+          .limit(50);
 
       activities.assignAll(
-        snap.docs.map((d) => Activity.fromDoc(d)).toList(),
+        rows.map((r) => Activity.fromDoc(Doc.fromRow(r))).toList(),
       );
       _activitiesLoadedAt = DateTime.now();
     } catch (e) {
@@ -112,13 +107,13 @@ class HomeController extends GetxController {
 
     _prodSub?.cancel();
     _prodSub = _db
-        .collection('products')
-        .where('isActive', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
+        .from('products')
+        .stream(primaryKey: ['id'])
+        .eq('is_active', true)
+        .order('created_at', ascending: false)
         .limit(10)
-        .snapshots()
-        .listen((snap) {
-      products.assignAll(snap.docs.map((d) => Product.fromDoc(d)));
+        .listen((rows) {
+      products.assignAll(rows.map((r) => Product.fromDoc(Doc.fromRow(r))));
       loadingProducts.value = false;
     }, onError: (e) {
       loadingProducts.value = false;

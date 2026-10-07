@@ -35,18 +35,36 @@ Future<void> showDeleteAccountFlow(BuildContext context) async {
 Future<void> _beginDeletion() async {
   final accountRepo = Get.find<Repos>().accountRepo;
 
-  if (accountRepo.needsReauth()) {
-    final password = await _promptPassword();
-    if (password == null) return; // user cancelled
-    try {
-      await accountRepo.reauthenticateWithPassword(password);
-    } catch (e) {
-      _showError('Could not verify your password. ${_friendly(e)}');
-      return;
-    }
+  if (await accountRepo.needsReauth()) {
+    if (!await _reauthenticate()) return;
   }
 
   await _runDeletion();
+}
+
+/// Re-verifies the user: password for email accounts, the provider's own
+/// sign-in sheet for Google/Apple accounts. Returns true when confirmed.
+Future<bool> _reauthenticate() async {
+  final accountRepo = Get.find<Repos>().accountRepo;
+
+  if (accountRepo.canReauthWithPassword) {
+    final password = await _promptPassword();
+    if (password == null) return false; // user cancelled
+    try {
+      await accountRepo.reauthenticateWithPassword(password);
+      return true;
+    } catch (e) {
+      _showError('Could not verify your password. ${_friendly(e)}');
+      return false;
+    }
+  }
+
+  final res = await Get.find<AuthController>().reauthenticateWithOAuth();
+  if (!res.ok) {
+    if (res.code != 'cancelled') _showError('Could not verify your account. ${res.message}');
+    return false;
+  }
+  return true;
 }
 
 Future<void> _runDeletion() async {
@@ -62,14 +80,7 @@ Future<void> _runDeletion() async {
     await _handleDeletionSuccess();
   } on ReauthRequiredException {
     Get.back();
-    final password = await _promptPassword();
-    if (password == null) return;
-    try {
-      await repos.accountRepo.reauthenticateWithPassword(password);
-      await _runDeletion();
-    } catch (e) {
-      _showError('Could not verify your password. ${_friendly(e)}');
-    }
+    if (await _reauthenticate()) await _runDeletion();
   } catch (e) {
     Get.back(); // close progress dialog
     _showRetryableError(e);
@@ -140,8 +151,7 @@ String _friendly(Object e) {
   return s.startsWith('Exception: ') ? s.substring(11) : s;
 }
 
-/// Simple password re-entry sheet. Email/password is the only credential
-/// type this app supports (see AuthController), so that's all this handles.
+/// Simple password re-entry sheet (email/password accounts).
 Future<String?> _promptPassword() {
   final controller = TextEditingController();
   return Get.dialog<String?>(

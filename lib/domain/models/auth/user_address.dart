@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
+import '../common/firestore_model.dart';
 
 class UserAddress {
   final String id;
@@ -38,7 +39,7 @@ class UserAddress {
     return parts.isNotEmpty ? parts.join(', ') : '—';
   }
 
-  factory UserAddress.fromDoc(DocumentSnapshot doc) {
+  factory UserAddress.fromDoc(Doc doc) {
     final d = (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
 
     double? _toDouble(dynamic v) {
@@ -56,8 +57,8 @@ class UserAddress {
       lat: _toDouble(d['lat']),
       lng: _toDouble(d['lng']),
       isDefault: (d['isDefault'] ?? false) == true,
-      createdAt: d['createdAt'] != null ? (d['createdAt'] as Timestamp).toDate() : null,
-      updatedAt: d['updatedAt'] != null ? (d['updatedAt'] as Timestamp).toDate() : null,
+      createdAt: FirestoreModel.readDate(d['createdAt']),
+      updatedAt: FirestoreModel.readDate(d['updatedAt']),
     );
   }
 
@@ -70,8 +71,8 @@ class UserAddress {
       'lat': lat,
       'lng': lng,
       'isDefault': isDefault,
-      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
-      'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
+      'createdAt': FirestoreModel.ts(createdAt),
+      'updatedAt': FirestoreModel.ts(updatedAt),
     };
   }
 }

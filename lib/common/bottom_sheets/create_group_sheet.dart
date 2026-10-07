@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:fitbud/domain/models/auth/app_user.dart';
 import 'package:fitbud/domain/repos/repo_provider.dart';
 import 'package:fitbud/presentation/screens/chats/chat_screen.dart';
@@ -99,9 +98,7 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
 
   Future<String> _uploadGroupPhoto(String groupId) async {
     if (_imageBytes == null) return '';
-    final ref = FirebaseStorage.instance.ref().child('groups/$groupId/avatar.jpg');
-    await ref.putData(_imageBytes!, SettableMetadata(contentType: 'image/jpeg'));
-    return await ref.getDownloadURL();
+    return repos.mediaRepo.uploadGroupAvatarBytes(groupId: groupId, bytes: _imageBytes!);
   }
 
   Future<void> _createGroup() async {

@@ -12,7 +12,7 @@ class ScanDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final ts = scan['scannedAt'];
     final date = ts != null
-        ? DateFormat('dd MMM yyyy, hh:mm a').format(ts.toDate())
+        ? DateFormat('dd MMM yyyy, hh:mm a').format(ts is DateTime ? ts : ts.toDate())
         : '--';
 
     return Scaffold(

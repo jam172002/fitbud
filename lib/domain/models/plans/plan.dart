@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 class Plan implements FirestoreModel {
@@ -28,7 +28,7 @@ class Plan implements FirestoreModel {
     required this.updatedAt,
   });
 
-  static Plan fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static Plan fromDoc(Doc doc) {
     final d = doc.data() ?? <String, dynamic>{};
 
     // Support both old and new keys (admin model already does this)
@@ -44,8 +44,8 @@ class Plan implements FirestoreModel {
       durationDays: _toInt(d['durationDays'] ?? d['duration']),
       features: _toStringList(d['features'] ?? d['facilities']),
       isActive: FirestoreModel.readBool(d['isActive'], fallback: true),
-      createdAt: createdAtRaw is Timestamp ? createdAtRaw.toDate() : FirestoreModel.readDate(createdAtRaw),
-      updatedAt: updatedAtRaw is Timestamp ? updatedAtRaw.toDate() : FirestoreModel.readDate(updatedAtRaw),
+      createdAt: FirestoreModel.readDate(createdAtRaw),
+      updatedAt: FirestoreModel.readDate(updatedAtRaw),
     );
   }
 

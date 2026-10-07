@@ -1,52 +1,49 @@
 import 'dart:typed_data';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import '../../../domain/models/auth/app_user.dart';
-import '../../../domain/models/auth/user_settings.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../data/doc.dart';
+import '../../../data/supabase_config.dart';
+import '../../models/auth/app_user.dart';
 import '../../models/auth/user_address.dart';
-import '../firestore_paths.dart';
-import '../firestore_repo_base.dart';
+import '../../models/auth/user_settings.dart';
+import '../repo_base.dart';
 import '../repo_exceptions.dart';
 
 class AuthRepo extends RepoBase {
-  final FirebaseAuth auth;
-  AuthRepo(super.db, this.auth);
+  AuthRepo(super.db);
+
+  GoTrueClient get auth => db.auth;
 
   final Map<String, AppUser> _userCache = {};
   final Map<String, DateTime> _userCacheTime = {};
   static const _userCacheTtl = Duration(minutes: 5);
 
-  Stream<User?> authState() => auth.authStateChanges();
-
-  String requireUid() {
-    final u = auth.currentUser;
-    if (u == null) throw PermissionException('User is not signed in');
-    return u.uid;
-  }
+  /// Emits the signed-in user (or null) - once per identity change, not on
+  /// every token refresh.
+  Stream<User?> authState() => auth.onAuthStateChange
+      .map((s) => s.session?.user)
+      .distinct((a, b) => a?.id == b?.id);
 
   Future<void> signOut() => auth.signOut();
 
-  // ---- Profile (users/{uid}) ----
+  // ---- Profile (profiles/{uid}) ----
 
   Stream<AppUser?> watchMe() {
     final uid = requireUid();
-    return doc('${FirestorePaths.users}/$uid')
-        .snapshots()
-        .map((s) => s.exists ? AppUser.fromDoc(s) : null);
+    return streamDocs('profiles', eqColumn: 'id', eqValue: uid)
+        .map((l) => l.isEmpty ? null : AppUser.fromDoc(l.first));
   }
 
   Future<AppUser> getUser(String uid) async {
     final cached = _userCache[uid];
     final cachedAt = _userCacheTime[uid];
-    if (cached != null && cachedAt != null &&
-        DateTime.now().difference(cachedAt) < _userCacheTtl) {
+    if (cached != null && cachedAt != null && DateTime.now().difference(cachedAt) < _userCacheTtl) {
       return cached;
     }
-    final snap = await doc('${FirestorePaths.users}/$uid').get();
-    if (!snap.exists) throw NotFoundException('User not found');
-    final user = AppUser.fromDoc(snap);
+    final row = await db.from('profiles').select().eq('id', uid).maybeSingle();
+    if (row == null) throw NotFoundException('User not found');
+    final user = AppUser.fromDoc(docOf(row));
     _userCache[uid] = user;
     _userCacheTime[uid] = DateTime.now();
     return user;
@@ -57,183 +54,124 @@ class AuthRepo extends RepoBase {
     _userCacheTime.remove(uid);
   }
 
-  Future<void> upsertMe({
-    required AppUser user,
-    bool merge = true,
-  }) async {
+  static const _serverManaged = {
+    'isPremium', 'premiumUntil', 'activePlanId', 'activeSubscriptionId', 'createdAt', 'updatedAt',
+  };
+
+  Future<void> upsertMe({required AppUser user, bool merge = true}) async {
     final uid = requireUid();
     if (user.id != uid) throw PermissionException('Cannot write another user profile');
-    await doc('${FirestorePaths.users}/$uid').set(user.toMap(), SetOptions(merge: merge));
+    final row = DbRow.toRow(user.toMap(), drop: _serverManaged)..removeWhere((_, v) => v == null);
+    await db.from('profiles').upsert({'id': uid, ...row});
   }
 
   Future<void> updateMeFields(Map<String, dynamic> fields) async {
     final uid = requireUid();
-    await doc('${FirestorePaths.users}/$uid').update({
-      ...fields,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    final row = DbRow.toRow(fields, drop: {'updatedAt', 'fcmTokens'});
+    if (row.isEmpty) return;
+    await db.from('profiles').update(row).eq('id', uid);
+    invalidateUserCache(uid);
   }
 
-  // ---- Settings (users/{uid}/settings/settings) ----
+  /// Adds an FCM token to my profile (multi-device).
+  Future<void> addFcmToken(String token) async {
+    final uid = requireUid();
+    final row = await db.from('profiles').select('fcm_tokens').eq('id', uid).maybeSingle();
+    final tokens = <String>{...((row?['fcm_tokens'] as List?)?.cast<String>() ?? const [])};
+    if (tokens.add(token)) {
+      await db.from('profiles').update({'fcm_tokens': tokens.toList()}).eq('id', uid);
+    }
+  }
+
+  // ---- Settings ----
 
   Stream<UserSettings?> watchMySettings() {
     final uid = requireUid();
-    return doc(FirestorePaths.userSettings(uid))
-        .snapshots()
-        .map((s) => s.exists ? UserSettings.fromDoc(s) : null);
+    return streamDocs('user_settings', pk: ['user_id'], idKey: 'user_id', eqColumn: 'user_id', eqValue: uid)
+        .map((l) => l.isEmpty ? null : UserSettings.fromDoc(l.first));
   }
 
   Future<void> upsertMySettings(UserSettings settings) async {
     final uid = requireUid();
-    await doc(FirestorePaths.userSettings(uid)).set(
-      {
-        ...settings.toMap(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    await db.from('user_settings').upsert({
+      'user_id': uid,
+      ...DbRow.toRow(settings.toMap(), drop: {'updatedAt'}),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
   }
 
   Future<AppUser?> getMeOnce() async {
     final uid = requireUid();
-    final snap = await doc('${FirestorePaths.users}/$uid').get();
-    if (!snap.exists) return null;
-    return AppUser.fromDoc(snap);
+    final row = await db.from('profiles').select().eq('id', uid).maybeSingle();
+    return row == null ? null : AppUser.fromDoc(docOf(row));
   }
 
-  /// Uploads profile image bytes and returns download URL
+  /// Uploads profile image bytes and returns its public URL.
   Future<String> uploadMyProfileImage(Uint8List bytes) async {
     final uid = requireUid();
-    final ref = FirebaseStorage.instance.ref('users/$uid/profile.jpg');
-    await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
-    return await ref.getDownloadURL();
+    final path = 'users/$uid/profile.jpg';
+    final bucket = db.storage.from(SupabaseConfig.profileBucket);
+    await bucket.uploadBinary(
+      path,
+      bytes,
+      fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+    );
+    // cache-bust: the object path never changes
+    return '${bucket.getPublicUrl(path)}?v=${DateTime.now().millisecondsSinceEpoch}';
   }
 
-  // ---- Addresses (users/{uid}/addresses) ----
+  // ---- Addresses ----
+
+  List<UserAddress> _sortAddresses(List<Doc> l) {
+    final out = l.map(UserAddress.fromDoc).toList();
+    out.sort((a, b) {
+      if (a.isDefault != b.isDefault) return a.isDefault ? -1 : 1;
+      final au = a.updatedAt?.millisecondsSinceEpoch ?? 0;
+      final bu = b.updatedAt?.millisecondsSinceEpoch ?? 0;
+      return bu.compareTo(au);
+    });
+    return out;
+  }
 
   Stream<List<UserAddress>> watchMyAddresses({int limit = 50}) {
     final uid = requireUid();
-    return db
-        .collection(FirestorePaths.userAddresses(uid))
-        .orderBy('isDefault', descending: true)
-        .orderBy('updatedAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((q) => q.docs.map((d) => UserAddress.fromDoc(d)).toList());
+    return streamDocs('user_addresses', eqColumn: 'user_id', eqValue: uid, limit: limit)
+        .map(_sortAddresses);
   }
 
   Future<List<UserAddress>> getMyAddressesOnce({int limit = 50}) async {
     final uid = requireUid();
-    final q = await db
-        .collection(FirestorePaths.userAddresses(uid))
-        .orderBy('isDefault', descending: true)
-        .orderBy('updatedAt', descending: true)
-        .limit(limit)
-        .get();
-
-    return q.docs.map((d) => UserAddress.fromDoc(d)).toList();
+    final rows = await db.from('user_addresses').select().eq('user_id', uid).limit(limit);
+    return _sortAddresses(docs(rows));
   }
 
   Future<String> addAddressEnforceMax2({
     required UserAddress address,
     bool makeDefaultIfFirst = true,
   }) async {
-    final uid = requireUid();
-    final colRef = db.collection(FirestorePaths.userAddresses(uid));
-
-    final pre = await colRef
-        .orderBy('isDefault', descending: true)
-        .orderBy('updatedAt', descending: true)
-        .limit(10)
-        .get();
-
-    final refs = pre.docs.map((d) => d.reference).toList();
-
-    return db.runTransaction((tx) async {
-      final snaps = <DocumentSnapshot<Map<String, dynamic>>>[];
-      for (final r in refs) {
-        final s = await tx.get(r);
-        if (s.exists) snaps.add(s);
-      }
-
-      final existing = snaps.map((s) => UserAddress.fromDoc(s)).toList();
-
-      final now = FieldValue.serverTimestamp();
-      final shouldBeDefault = existing.isEmpty && makeDefaultIfFirst;
-
-      UserAddress pickOldest(List<UserAddress> list) {
-        int score(UserAddress a) {
-          final u = a.updatedAt?.millisecondsSinceEpoch ?? 0;
-          final c = a.createdAt?.millisecondsSinceEpoch ?? 0;
-          return (u != 0 ? u : c);
-        }
-
-        final copy = [...list];
-        copy.sort((a, b) => score(a).compareTo(score(b)));
-        return copy.first;
-      }
-
-      if (existing.length >= 2) {
-        final nonDefault = existing.where((a) => a.isDefault == false).toList();
-        final toDelete = nonDefault.isNotEmpty ? pickOldest(nonDefault) : pickOldest(existing);
-        tx.delete(colRef.doc(toDelete.id));
-      }
-
-      if (shouldBeDefault) {
-        for (final s in snaps) {
-          tx.update(s.reference, {
-            'isDefault': false,
-            'updatedAt': now,
-          });
-        }
-      }
-
-      final newDoc = colRef.doc();
-      tx.set(
-        newDoc,
-        {
-          ...address.toMap(),
-          'isDefault': shouldBeDefault ? true : (address.isDefault),
-          'createdAt': now,
-          'updatedAt': now,
-        },
-        SetOptions(merge: true),
-      );
-
-      return newDoc.id;
+    final id = await db.rpc('add_address_enforce_max2', params: {
+      'p_label': address.label ?? '',
+      'p_city': address.city ?? '',
+      'p_lat': address.lat,
+      'p_lng': address.lng,
+      'p_is_default': address.isDefault,
+      'p_make_default_if_first': makeDefaultIfFirst,
     });
+    return '$id';
   }
 
-  Stream<String?> watchSelectedAddressId() {
-    return watchMySettings().map((s) => s?.selectedAddressId);
-  }
+  Stream<String?> watchSelectedAddressId() => watchMySettings().map((s) => s?.selectedAddressId);
 
   Future<void> setSelectedAddressId(String addressId) async {
     final uid = requireUid();
-    await doc(FirestorePaths.userSettings(uid)).set(
-      {
-        'selectedAddressId': addressId,
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    await db.from('user_settings').upsert({
+      'user_id': uid,
+      'selected_address_id': addressId,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    });
   }
 
   Future<void> setDefaultAddress(String addressId) async {
-    final uid = requireUid();
-    final colRef = db.collection(FirestorePaths.userAddresses(uid));
-    final now = FieldValue.serverTimestamp();
-
-    final q = await colRef.limit(50).get();
-    final batch = db.batch();
-
-    for (final d in q.docs) {
-      batch.update(d.reference, {
-        'isDefault': d.id == addressId,
-        'updatedAt': now,
-      });
-    }
-
-    await batch.commit();
+    await db.rpc('set_default_address', params: {'address_id': addressId});
   }
 }

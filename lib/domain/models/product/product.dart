@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
+import '../common/firestore_model.dart';
 
 class Product {
   final String id;
@@ -19,7 +20,7 @@ class Product {
     required this.createdAt,
   });
 
-  static Product fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  static Product fromDoc(Doc doc) {
     final d = doc.data() ?? <String, dynamic>{};
     final createdAtRaw = d['createdAt'];
     return Product(
@@ -29,7 +30,7 @@ class Product {
       price: (d['price'] is num) ? (d['price'] as num).toDouble() : double.tryParse('${d['price'] ?? 0}') ?? 0,
       imageUrl: (d['imageUrl'] ?? d['image'] ?? '').toString(),
       isActive: (d['isActive'] ?? true) == true,
-      createdAt: createdAtRaw is Timestamp ? createdAtRaw.toDate() : null,
+      createdAt: FirestoreModel.readDate(createdAtRaw),
     );
   }
 }

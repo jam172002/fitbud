@@ -111,29 +111,15 @@
 </div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-  import {
-    getAuth, signInWithEmailAndPassword, signOut,
-  } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-  import {
-    getFunctions, httpsCallable,
-  } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js";
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-  // Same project the FitBud app uses (lib/firebase_options.dart -> web).
-  // Firebase web API keys are not secret - access is enforced by Firestore/
-  // Storage/Functions security rules, not by hiding this config.
-  const firebaseConfig = {
-    apiKey: "AIzaSyCxCizwD2HI0FNh587GILP7bnZKsmPajFY",
-    appId: "1:900712761830:web:a2b99bc0df870d992f6e27",
-    messagingSenderId: "900712761830",
-    projectId: "fitbud-46f70",
-    authDomain: "fitbud-46f70.firebaseapp.com",
-    storageBucket: "fitbud-46f70.firebasestorage.app",
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const functions = getFunctions(app);
+  // Public (client-safe) project URL + publishable key. Access to data is
+  // enforced by Postgres row-level security, not by hiding these values.
+  const supabase = createClient(
+    "https://tcvldfsydgxxfdyrwspv.supabase.co",
+    "sb_publishable_U1z5ZX785c7JtlVlsEudSw_esh8giFR",
+    { auth: { persistSession: false } }
+  );
 
   const el = (id) => document.getElementById(id);
   const show = (id) => el(id).classList.remove("hidden");
@@ -149,13 +135,14 @@
     }
     el("signInBtn").disabled = true;
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       el("signedInEmail").textContent = email;
       hide("signInCard");
       show("confirmCard");
     } catch (e) {
       // Deliberately generic: never confirm/deny whether an email has an
-      // account, and don't leak raw Firebase error internals.
+      // account, and don't leak raw auth error internals.
       el("signInError").textContent = "Email or password is incorrect.";
     } finally {
       el("signInBtn").disabled = false;
@@ -167,7 +154,7 @@
   });
 
   el("cancelBtn").addEventListener("click", async () => {
-    await signOut(auth).catch(() => {});
+    await supabase.auth.signOut().catch(() => {});
     hide("confirmCard");
     el("email").value = "";
     el("password").value = "";
@@ -179,9 +166,11 @@
     hide("confirmCard");
     show("progressCard");
     try {
-      const requestAccountDeletion = httpsCallable(functions, "requestAccountDeletion");
-      await requestAccountDeletion({ requestedVia: "web" });
-      await signOut(auth).catch(() => {});
+      const { error } = await supabase.functions.invoke("delete-account", {
+        body: { requestedVia: "web" },
+      });
+      if (error) throw error;
+      await supabase.auth.signOut().catch(() => {});
       hide("progressCard");
       show("doneCard");
     } catch (e) {

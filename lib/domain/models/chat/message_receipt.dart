@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 import 'message.dart';
 
@@ -19,7 +19,7 @@ class MessageReceipt implements FirestoreModel {
     this.updatedAt,
   });
 
-  static MessageReceipt fromDoc(DocumentSnapshot<Map<String, dynamic>> doc, {required String messageId}) {
+  static MessageReceipt fromDoc(Doc doc, {required String messageId}) {
     final d = doc.data() ?? {};
     return MessageReceipt(
       id: doc.id,

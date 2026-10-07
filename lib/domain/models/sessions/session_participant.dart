@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/doc.dart';
 import '../common/firestore_model.dart';
 
 class SessionParticipant implements FirestoreModel {
@@ -19,7 +19,7 @@ class SessionParticipant implements FirestoreModel {
   });
 
   static SessionParticipant fromDoc(
-      DocumentSnapshot<Map<String, dynamic>> doc, {
+      Doc doc, {
         required String sessionId,
       }) {
     final d = doc.data() ?? {};

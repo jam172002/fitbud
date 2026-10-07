@@ -1,17 +1,18 @@
 import 'dart:typed_data';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../data/supabase_config.dart';
 import '../repo_exceptions.dart';
 
 class MediaRepo {
-  final FirebaseStorage storage;
-  final FirebaseAuth auth;
-  MediaRepo(this.storage, this.auth);
+  final SupabaseClient db;
+  MediaRepo(this.db);
 
   String _uid() {
-    final u = auth.currentUser;
+    final u = db.auth.currentUser;
     if (u == null) throw PermissionException('User is not signed in');
-    return u.uid;
+    return u.id;
   }
 
   Future<String> uploadProfilePhotoBytes({
@@ -19,9 +20,10 @@ class MediaRepo {
     String mimeType = 'image/jpeg',
   }) async {
     final uid = _uid();
-    final ref = storage.ref('users/$uid/profile.jpg');
-    await ref.putData(bytes, SettableMetadata(contentType: mimeType));
-    return ref.getDownloadURL();
+    final path = 'users/$uid/profile.jpg';
+    final bucket = db.storage.from(SupabaseConfig.profileBucket);
+    await bucket.uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mimeType, upsert: true));
+    return '${bucket.getPublicUrl(path)}?v=${DateTime.now().millisecondsSinceEpoch}';
   }
 
   Future<String> uploadChatMediaBytes({
@@ -32,8 +34,22 @@ class MediaRepo {
   }) async {
     final uid = _uid();
     final name = DateTime.now().millisecondsSinceEpoch.toString();
-    final ref = storage.ref('chat/$conversationId/$uid/$name.$ext');
-    await ref.putData(bytes, SettableMetadata(contentType: mimeType));
-    return ref.getDownloadURL();
+    final path = '$conversationId/$uid/$name.$ext';
+    final bucket = db.storage.from(SupabaseConfig.chatBucket);
+    await bucket.uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mimeType));
+    return bucket.getPublicUrl(path);
+  }
+
+  /// Group avatar (written at group-creation time).
+  Future<String> uploadGroupAvatarBytes({
+    required String groupId,
+    required Uint8List bytes,
+    String mimeType = 'image/jpeg',
+  }) async {
+    _uid();
+    final path = 'groups/$groupId/avatar.jpg';
+    final bucket = db.storage.from(SupabaseConfig.profileBucket);
+    await bucket.uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mimeType, upsert: true));
+    return '${bucket.getPublicUrl(path)}?v=${DateTime.now().millisecondsSinceEpoch}';
   }
 }

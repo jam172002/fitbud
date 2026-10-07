@@ -6,7 +6,6 @@ import 'package:get/get.dart';
 import 'app_binding.dart';
 import 'notification_helper/my_notification.dart';
 
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -29,27 +28,26 @@ class MainApp extends StatelessWidget {
 
   Future<void> _initAfterFirstFrame() async {
     // Fire-and-forget init
-    if (!kIsWeb) {
-      await FirebaseAppCheck.instance.activate(
-        androidProvider:
-        kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-      );
+    try {
+      if (!kIsWeb) {
+        // Ask permissions AFTER UI is shown
+        await FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
 
-      // Ask permissions AFTER UI is shown
-      await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+        await flutterLocalNotificationsPlugin
+            .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+            ?.requestNotificationsPermission();
 
-      await flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-
-      await MyNotification.initialize(flutterLocalNotificationsPlugin);
-    } else {
-      MyNotification.initializeWebMessaging();
+        await MyNotification.initialize(flutterLocalNotificationsPlugin);
+      } else {
+        MyNotification.initializeWebMessaging();
+      }
+    } catch (e) {
+      debugPrint('Push setup skipped: $e');
     }
 
     // Update token if already logged in

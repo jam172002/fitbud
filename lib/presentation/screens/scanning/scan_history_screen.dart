@@ -1,11 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../../../utils/colors.dart';
 import '../../../common/appbar/common_appbar.dart';
-import '../../../firebase_instances.dart';
+import '../../../data/supabase_instances.dart';
+import '../../../domain/repos/repo_provider.dart';
 import 'gym_scan_history_screen.dart';
 
 class ScanHistoryScreen extends StatelessWidget {
@@ -13,25 +13,21 @@ class ScanHistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseInstances.auth.currentUser?.uid;
+    final uid = SupabaseInstances.uid;
 
     return Scaffold(
       backgroundColor: XColors.primaryBG,
       appBar: XAppBar(title: 'Scan History'),
       body: uid == null
           ? const Center(child: Text('Not signed in'))
-          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseInstances.db
-            .collection('scans')
-            .where('userId', isEqualTo: uid)
-            .orderBy('scannedAt', descending: true)
-            .snapshots(),
+          : StreamBuilder<List<Map<String, dynamic>>>(
+        stream: Get.find<Repos>().scanRepo.watchScanMaps(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final docs = snap.data?.docs ?? [];
+          final docs = snap.data ?? [];
 
           if (docs.isEmpty) {
             return const Center(
@@ -45,7 +41,7 @@ class ScanHistoryScreen extends StatelessWidget {
             );
           }
 
-          final Map<String, List<QueryDocumentSnapshot<Map<String, dynamic>>>> byGym = {};
+          final Map<String, List<Map<String, dynamic>>> byGym = {};
 
           for (final d in docs) {
             final gymId = d['gymId'] as String;
@@ -60,9 +56,9 @@ class ScanHistoryScreen extends StatelessWidget {
               final gymId = byGym.keys.elementAt(index);
               final scans = byGym[gymId]!;
 
-              final lastTs = scans.first['scannedAt'] as Timestamp?;
+              final lastTs = scans.first['scannedAt'] as DateTime?;
               final lastVisit = lastTs != null
-                  ? DateFormat('dd MMM yyyy').format(lastTs.toDate())
+                  ? DateFormat('dd MMM yyyy').format(lastTs)
                   : '--';
 
               return GestureDetector(
