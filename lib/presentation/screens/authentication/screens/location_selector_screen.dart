@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 
 import '../../../../domain/models/auth/user_address.dart';
+import '../../../../utils/colors.dart';
 
 class LocationSelectorScreen extends StatefulWidget {
   const LocationSelectorScreen({super.key});
@@ -164,15 +165,32 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
+    OutlineInputBorder border(Color c) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: c),
+        );
+
     return PopScope(
       canPop: true,
       child: Scaffold(
+        backgroundColor: XColors.primaryBG,
         appBar: AppBar(
-          title: const Text('Select Location'),
+          backgroundColor: XColors.primaryBG,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: const IconThemeData(color: XColors.primaryText),
+          title: const Text(
+            'Select Location',
+            style: TextStyle(
+              color: XColors.primaryText,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
+            icon: const Icon(Icons.arrow_back, color: XColors.primaryText),
             onPressed: () => Get.back(),
           ),
         ),
@@ -185,12 +203,21 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
                 controller: searchController,
+                cursorColor: XColors.primary,
+                style: const TextStyle(color: XColors.primaryText),
+                textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   hintText: 'Search city',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  hintStyle: TextStyle(
+                    color: XColors.bodyText.withValues(alpha: 0.5),
                   ),
+                  prefixIcon: const Icon(Icons.search, color: XColors.bodyText),
+                  filled: true,
+                  fillColor: XColors.secondaryBG,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                  border: border(XColors.borderColor),
+                  enabledBorder: border(XColors.borderColor),
+                  focusedBorder: border(XColors.primary),
                 ),
                 onSubmitted: (val) => _selectFromSearch(val),
               ),
@@ -202,27 +229,71 @@ class _LocationSelectorScreenState extends State<LocationSelectorScreen> {
             if (_loading)
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
+                child: CircularProgressIndicator(color: XColors.primary),
               )
             else if (_currentLocationLabel != null)
-              ListTile(
-                leading: const Icon(Icons.my_location),
-                title: const Text('Use current location'),
-                subtitle: Text(_currentLocationLabel!),
-                onTap: _selectCurrentLocation,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: XColors.secondaryBG,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: XColors.primary.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    leading:
+                        const Icon(Icons.my_location, color: XColors.primary),
+                    title: const Text(
+                      'Use current location',
+                      style: TextStyle(
+                        color: XColors.primaryText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      _currentLocationLabel!,
+                      style: TextStyle(
+                        color: XColors.bodyText.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    onTap: _selectCurrentLocation,
+                  ),
+                ),
               ),
 
-            const Divider(),
+            const SizedBox(height: 12),
+            const Divider(color: XColors.borderColor, height: 1),
 
             // Popular Cities
             Expanded(
-              child: ListView.builder(
+              child: ListView.separated(
                 itemCount: _popularCities.length,
+                separatorBuilder: (_, __) => Divider(
+                  color: XColors.borderColor.withValues(alpha: 0.5),
+                  height: 1,
+                  indent: 16,
+                  endIndent: 16,
+                ),
                 itemBuilder: (context, index) {
                   final city = _popularCities[index];
                   return ListTile(
-                    leading: const Icon(Icons.location_city),
-                    title: Text(city),
+                    leading: const Icon(
+                      Icons.location_city,
+                      color: XColors.bodyText,
+                    ),
+                    title: Text(
+                      city,
+                      style: const TextStyle(color: XColors.primaryText),
+                    ),
+                    trailing: Icon(
+                      Icons.chevron_right,
+                      color: XColors.bodyText.withValues(alpha: 0.5),
+                    ),
                     onTap: () => _selectCityOnly(city),
                   );
                 },

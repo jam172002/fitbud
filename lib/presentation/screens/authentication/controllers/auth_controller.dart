@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, debugPrint;
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
@@ -57,7 +57,7 @@ class AuthController extends GetxController {
       if (u != null) {
         _meSub = _repos.authRepo.watchMe().listen((profile) {
           me.value = profile;
-        });
+        }, onError: (e) => debugPrint('watchMe stream error: $e'));
       }
     });
   }

@@ -21,6 +21,7 @@ class ProfileSetupGymPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uniqueGyms = gyms.toSet().toList();
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: Column(
@@ -70,13 +71,17 @@ class ProfileSetupGymPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: selectedGym ?? '-- select --', // must exist in items
+              // Must match exactly one item; the gym list may still be loading
+              // or contain duplicates, so de-dupe and fall back to the placeholder.
+              value: uniqueGyms.contains(selectedGym)
+                  ? selectedGym
+                  : '-- select --',
               dropdownColor: XColors.secondaryBG, // dropdown menu background
               style: TextStyle(
                 color: XColors.primaryText, // selected text color
                 fontSize: 14,
               ),
-              items: gyms.map((gym) {
+              items: uniqueGyms.map((gym) {
                 return DropdownMenuItem<String>(
                   value: gym,
                   child: Text(

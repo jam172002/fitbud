@@ -12,7 +12,10 @@ class SupabaseConfig {
   );
 
   /// OAuth client ids for native Google sign-in (see docs/SUPABASE_SETUP.md).
-  static const googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+  static const googleWebClientId = String.fromEnvironment(
+    'GOOGLE_WEB_CLIENT_ID',
+    defaultValue: '6903241866-atikn4j4uu6ea4uukb4ngp8freep2526.apps.googleusercontent.com',
+  );
   static const googleIosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
 
   /// Deep link used by password-reset / email-confirmation emails (mobile).

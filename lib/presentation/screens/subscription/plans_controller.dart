@@ -186,7 +186,7 @@ class PremiumPlanController extends GetxController {
       }
       me.value = AppUser.fromDoc(Doc.fromRow(rows.first));
       _syncSelectionWithUser();
-    });
+    }, onError: (e) => error.value = e.toString());
   }
 
   void _syncSelectionWithUser() {

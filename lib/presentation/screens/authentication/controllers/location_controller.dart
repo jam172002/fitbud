@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart' show User;
 import 'package:get/get.dart';
@@ -59,14 +60,14 @@ class LocationController extends GetxController {
     _addrSub = _authRepo.watchMyAddresses(limit: 50).listen((list) {
       _latestAddresses = list;
       _applySelection();
-    });
+    }, onError: (e) => debugPrint('addresses stream error: $e'));
 
     // Selected address id from settings
     _selSub = _authRepo.watchSelectedAddressId().listen((id) {
       final v = (id ?? '').trim();
       _selectedAddressId = v.isEmpty ? null : v;
       _applySelection();
-    });
+    }, onError: (e) => debugPrint('selected address stream error: $e'));
   }
 
   void _unbindStreams() {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 // buddy_controller.dart
 import 'dart:async';
 import 'package:get/get.dart';
@@ -48,18 +49,23 @@ class BuddyController extends GetxController {
   void onInit() {
     super.onInit();
 
-    _subIn = repos.buddyRepo.watchIncomingRequests().listen(_hydrateIncoming);
-    _subOut = repos.buddyRepo.watchOutgoingRequests().listen(_hydrateOutgoing);
+    void onErr(Object e) => debugPrint('buddy stream error: $e');
+    _subIn = repos.buddyRepo
+        .watchIncomingRequests()
+        .listen(_hydrateIncoming, onError: onErr);
+    _subOut = repos.buddyRepo
+        .watchOutgoingRequests()
+        .listen(_hydrateOutgoing, onError: onErr);
 
     // ✅ NEW: keep buddy ids updated
     // Implement this in repo (recommended) as: Stream<List<String>> watchBuddyIds()
     _subBuddies = repos.buddyRepo.watchBuddyIds().listen((ids) {
       buddyIds.assignAll(ids);
-    });
+    }, onError: onErr);
 
     _subBlocked = repos.moderationRepo.watchMyBlockedUserIds().listen((ids) {
       blockedUserIds.assignAll(ids);
-    });
+    }, onError: onErr);
   }
 
   bool isBuddy(String userId) => buddyIds.contains(userId);

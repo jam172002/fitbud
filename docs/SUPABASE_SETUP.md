@@ -76,6 +76,30 @@ Admin = `app_metadata.admin = true` (can write gyms/plans/products/activities an
 update auth.users set raw_app_meta_data = raw_app_meta_data || '{"admin": true}' where email = 'you@example.com';
 ```
 
+### 7. Admin panel and gym panel
+Both panels (sibling folders `fitbud_admin/` and `gym_panel/`) now use the same
+Supabase project as the app - no Firebase SDK.
+
+* **Admin panel** signs in with email + password and requires `app_metadata.admin = true`
+  (step 6). It manages gyms, plans, products, activities and users (RLS: `is_admin()`).
+  Images go to the public `catalog-media` bucket (admin-only write).
+* **Gym owners** are created from the admin panel (Gyms -> Add): the admin-only edge
+  function `create-gym-owner` creates the login (`app_metadata.role = gymOwner`) and the
+  gym row stores it in `gyms.owner_uid`. The **gym panel** finds the owner's gym through
+  that column; RLS (`is_gym_owner`) lets an owner read only their own gym's `scans` and
+  `gym_stats_daily`.
+* Admin "Delete user" calls `delete-account` with `targetUserId` (admins only), i.e. the same
+  full deletion pipeline as in-app account deletion.
+* Gym-panel "Forgot password": add the panel's URL under Authentication -> URL
+  Configuration -> Redirect URLs, otherwise the reset link opens the Site URL.
+* Run the panels with `--dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...`
+  to point at another project (defaults are the same public values the app uses).
+* Firebase Hosting is still used to serve the two web builds (`firebase.json` /
+  `.firebaserc` in each panel); nothing else from Firebase remains in them.
+
+Deploy order: `supabase db push` (adds the gym owner columns/policies and the bucket), then
+`supabase functions deploy create-gym-owner delete-account`.
+
 ## Abuse protection (replaces App Check)
 Supabase has no App Check equivalent. The layered approach used instead:
 * **RLS everywhere** - the anon key alone can read/write nothing sensitive.

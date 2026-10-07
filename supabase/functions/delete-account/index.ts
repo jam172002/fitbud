@@ -190,18 +190,29 @@ Deno.serve(async (req) => {
   });
   const { data: userData, error: userErr } = await userClient.auth.getUser();
   if (userErr || !userData.user) return json({ error: "unauthenticated" }, 401);
-  const uid = userData.user.id;
+  const callerId = userData.user.id;
+
+  // The admin panel may delete another user (`targetUserId`); everyone else
+  // can only delete their own account.
+  const body = await req.json().catch(() => ({}));
+  const isAdmin = userData.user.app_metadata?.admin === true;
+  const targetId = typeof body?.targetUserId === "string" ? body.targetUserId : "";
+  if (targetId && targetId !== callerId && !isAdmin) {
+    return json({ error: "permission_denied", message: "Admins only" }, 403);
+  }
+  const byAdmin = isAdmin && !!targetId && targetId !== callerId;
+  const uid = byAdmin ? targetId : callerId;
 
   // Defense in depth: the session must be recent, enforced server-side too.
-  const { data: age } = await userClient.rpc("session_age_minutes");
+  // (Skipped for admin-initiated deletion: the admin is not the account owner.)
+  const { data: age } = byAdmin ? { data: null } : await userClient.rpc("session_age_minutes");
   if (typeof age === "number" && age > REAUTH_MAX_AGE_MINUTES) {
     return json({ error: "failed_precondition", message: "REAUTH_REQUIRED", maxAgeMinutes: REAUTH_MAX_AGE_MINUTES }, 412);
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
-  const body = await req.json().catch(() => ({}));
-  const requestedVia = body?.requestedVia === "web" ? "web" : "app";
+  const requestedVia = byAdmin ? "admin" : body?.requestedVia === "web" ? "web" : "app";
 
   const { data: existing } = await admin.from("account_deletions").select("status").eq("user_id", uid).maybeSingle();
   if (existing?.status === "completed") return json({ ok: true, status: "completed", alreadyDone: true });

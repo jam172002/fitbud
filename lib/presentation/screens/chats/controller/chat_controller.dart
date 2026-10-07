@@ -70,7 +70,7 @@ class ChatController extends GetxController {
       final ids = parts.map((p) => p.userId).toList();
       if (ChatUtils.listEquals(ids, _cachedParticipantIds)) return;
       _cachedParticipantIds = ids;
-    });
+    }, onError: (e) => debugPrint('participants stream error: $e'));
 
     chat$ = _buildCombinedChatStream();
     markReadThrottled();
@@ -96,9 +96,11 @@ class ChatController extends GetxController {
 
     _clearedSub = repos.chatRepo.watchMyClearedAt(conversationId).listen((c) {
       _latestClearedAt = c;
-    });
+    }, onError: (e) => debugPrint('clearedAt stream error: $e'));
 
-    _msgsSub = repos.chatRepo.watchMessages(conversationId, limit: 50).listen(emit);
+    _msgsSub = repos.chatRepo
+        .watchMessages(conversationId, limit: 50)
+        .listen(emit, onError: (e) => debugPrint('messages stream error: $e'));
 
     controller.onCancel = () async {
       await _clearedSub?.cancel();
